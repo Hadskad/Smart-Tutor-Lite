@@ -1,0 +1,91 @@
+name: smart_tutor_lite
+
+description: Offline-first AI-powered study assistant with on-device transcription
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_bloc: ^9.1.1
+  equatable: ^2.0.5
+  dartz: ^0.10.1
+  
+  # Dependency Injection
+  get_it: ^9.1.1
+  injectable: ^2.3.2
+  
+  # Network
+  dio: ^5.4.0
+  connectivity_plus: ^7.0.0
+  
+  # Local Storage
+  sqflite: ^2.3.0
+  shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  
+  # FFI for native whisper
+  ffi: ^2.1.0
+  
+  # File handling
+  file_picker: ^10.3.7
+  path: ^1.8.3
+  
+  # Audio
+  record: ^6.1.2
+  audioplayers: ^5.2.1
+  
+  # PDF handling
+  syncfusion_flutter_pdf: ^31.2.15
+  
+  # UI
+  cupertino_icons: ^1.0.6
+  flutter_spinkit: ^5.2.0
+  lottie: ^3.0.0
+  
+  # Utils
+  intl: ^0.20.2
+  logger: ^2.0.2
+  uuid: ^4.2.2
+  
+  # Performance monitoring (Arm AI Challenge)
+  battery_plus: ^7.0.0
+
+  # Firebase/FlutterFire
+  firebase_core: ^4.2.1
+  firebase_storage: ^13.0.4
+  firebase_auth: ^6.1.2
+  cloud_firestore: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  
+  # Code generation
+  build_runner: ^2.4.7
+  injectable_generator: ^2.4.1
+  hive_generator: ^2.0.1
+  
+  # Testing
+  mockito: ^5.4.4
+  bloc_test: ^10.0.0
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/models/
+    - assets/images/
+    - assets/animations/

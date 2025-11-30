@@ -1,0 +1,49 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ],
+      "codebase": "default"
+    },
+    {
+      "source": "smarttutorcodebase",
+      "codebase": "smarttutorcodebase",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint",
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ],
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "smart-tutor-lite-a66b5",
+          "appId": "1:284576517158:android:3fe827fdde751511706ae7",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "smart-tutor-lite-a66b5",
+          "configurations": {
+            "android": "1:284576517158:android:3fe827fdde751511706ae7",
+            "ios": "1:284576517158:ios:5b40d708677bf7d0706ae7",
+            "macos": "1:284576517158:ios:5b40d708677bf7d0706ae7",
+            "web": "1:284576517158:web:9f2cfd2d7102d40a706ae7",
+            "windows": "1:284576517158:web:a93403e61933e38c706ae7"
+          }
+        }
+      }
+    }
+  }
+}

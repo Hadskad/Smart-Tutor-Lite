@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "284576517158",
+    "project_id": "smart-tutor-lite-a66b5",
+    "storage_bucket": "smart-tutor-lite-a66b5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:284576517158:android:3fe827fdde751511706ae7",
+        "android_client_info": {
+          "package_name": "com.example.smart_tutor_lite"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJ0lBzuBTdk-Z9oISubLOKVp2U9UcND70"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
