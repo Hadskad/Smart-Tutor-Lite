@@ -71,8 +71,13 @@ class _TtsPageState extends State<TtsPage> {
         });
 
         if (mounted) {
+          final colorScheme = Theme.of(context).colorScheme;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('PDF uploaded successfully')),
+            SnackBar(
+              content: const Text('PDF uploaded successfully'),
+              backgroundColor: colorScheme.secondary,
+              behavior: SnackBarBehavior.floating,
+            ),
           );
         }
       } else {
@@ -81,8 +86,13 @@ class _TtsPageState extends State<TtsPage> {
     } catch (e) {
       setState(() => _isUploadingPdf = false);
       if (mounted) {
+        final colorScheme = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload PDF: $e')),
+          SnackBar(
+            content: Text('Failed to upload PDF: $e'),
+            backgroundColor: colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
@@ -91,8 +101,13 @@ class _TtsPageState extends State<TtsPage> {
   void _convertTextToAudio() {
     final text = _textController.text.trim();
     if (text.isEmpty) {
+      final colorScheme = Theme.of(context).colorScheme;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter some text to convert')),
+        SnackBar(
+          content: const Text('Please enter some text to convert'),
+          backgroundColor: colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -103,13 +118,19 @@ class _TtsPageState extends State<TtsPage> {
 
   void _convertPdfToAudio() {
     if (_uploadedPdfUrl == null) {
+      final colorScheme = Theme.of(context).colorScheme;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload a PDF first')),
+        SnackBar(
+          content: const Text('Please upload a PDF first'),
+          backgroundColor: colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
 
-    _bloc.add(ConvertPdfToAudioEvent(pdfUrl: _uploadedPdfUrl!, voice: _selectedVoice));
+    _bloc.add(ConvertPdfToAudioEvent(
+        pdfUrl: _uploadedPdfUrl!, voice: _selectedVoice));
   }
 
   @override
@@ -122,13 +143,22 @@ class _TtsPageState extends State<TtsPage> {
         ),
         body: BlocConsumer<TtsBloc, TtsState>(
           listener: (context, state) {
+            final colorScheme = Theme.of(context).colorScheme;
             if (state is TtsError) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.message)),
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: colorScheme.error,
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             } else if (state is TtsSuccess) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Audio conversion completed')),
+                SnackBar(
+                  content: const Text('Audio conversion completed'),
+                  backgroundColor: colorScheme.secondary,
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             }
           },
@@ -166,7 +196,8 @@ class _TtsPageState extends State<TtsPage> {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Text('Voice: ', style: TextStyle(fontWeight: FontWeight.w500)),
+                const Text('Voice: ',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButton<String>(
@@ -257,8 +288,9 @@ class _TtsPageState extends State<TtsPage> {
 
   Widget _buildLatestJob(TtsState state) {
     if (state is TtsSuccess) {
+      final colorScheme = Theme.of(context).colorScheme;
       return Card(
-        color: Colors.blue.shade50,
+        color: colorScheme.secondary.withValues(alpha: 0.08),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -266,14 +298,14 @@ class _TtsPageState extends State<TtsPage> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.audiotrack, color: Colors.blue.shade700),
+                  Icon(Icons.audiotrack, color: colorScheme.secondary),
                   const SizedBox(width: 8),
                   Text(
                     'Latest Conversion',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade900,
+                      color: colorScheme.secondary,
                     ),
                   ),
                 ],
@@ -295,7 +327,8 @@ class _TtsPageState extends State<TtsPage> {
                   color: Colors.grey.shade600,
                 ),
               ),
-              if (state.job.status == 'completed' && state.job.audioUrl.isNotEmpty) ...[
+              if (state.job.status == 'completed' &&
+                  state.job.audioUrl.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _buildAudioPlayer(state.job.audioUrl, state),
               ],
@@ -311,23 +344,31 @@ class _TtsPageState extends State<TtsPage> {
     final jobs = state.jobs;
 
     if (jobs.isEmpty) {
-      return const Card(
+      final colorScheme = Theme.of(context).colorScheme;
+      return Card(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.audiotrack, size: 48, color: Colors.grey),
-                SizedBox(height: 12),
+                Icon(
+                  Icons.audiotrack,
+                  size: 48,
+                  color: colorScheme.outline.withValues(alpha: 0.7),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   'No audio conversions yet',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
                   'Convert text or PDF to audio above',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -406,7 +447,7 @@ class _TtsPageState extends State<TtsPage> {
               _bloc.add(PlayAudioEvent(audioUrl));
             }
           },
-          color: Colors.blue,
+          color: Theme.of(context).colorScheme.primary,
         ),
         if (isPlaying)
           IconButton(
@@ -414,7 +455,7 @@ class _TtsPageState extends State<TtsPage> {
             onPressed: () {
               _bloc.add(const StopAudioEvent());
             },
-            color: Colors.red,
+            color: Theme.of(context).colorScheme.error,
           ),
       ],
     );
@@ -450,4 +491,3 @@ class _TtsPageState extends State<TtsPage> {
     return DateFormat('MMM d, y • h:mm a').format(date);
   }
 }
-

@@ -16,29 +16,48 @@ class AudioRecorderWidget extends StatelessWidget {
       builder: (context, state) {
         final isRecording = state is TranscriptionRecording;
         final startedAt = isRecording ? state.startedAt : null;
+        final primaryColor = Theme.of(context).colorScheme.primary;
+        final errorColor = Theme.of(context).colorScheme.error;
 
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _Waveform(isActive: isRecording),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
             _RecordingTimer(startedAt: startedAt),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                backgroundColor:
-                    isRecording ? Colors.redAccent : Colors.blueAccent,
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isRecording ? errorColor : primaryColor,
+                  foregroundColor: Colors.white,
+                  elevation: isRecording ? 0 : 4,
+                  shadowColor: primaryColor.withValues(alpha: 0.4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                onPressed: () {
+                  final bloc = context.read<TranscriptionBloc>();
+                  bloc.add(
+                    isRecording
+                        ? const StopRecording()
+                        : const StartRecording(),
+                  );
+                },
+                icon:
+                    Icon(isRecording ? Icons.stop_rounded : Icons.mic_rounded),
+                label: Text(
+                  isRecording ? 'Stop Recording' : 'Start Recording',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ),
-              onPressed: () {
-                final bloc = context.read<TranscriptionBloc>();
-                bloc.add(
-                  isRecording ? const StopRecording() : const StartRecording(),
-                );
-              },
-              icon: Icon(isRecording ? Icons.stop : Icons.mic),
-              label: Text(isRecording ? 'Stop Recording' : 'Start Recording'),
             ),
           ],
         );
@@ -89,6 +108,8 @@ class _WaveformState extends State<_Waveform>
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return SizedBox(
       height: 60,
       child: AnimatedBuilder(
@@ -96,17 +117,23 @@ class _WaveformState extends State<_Waveform>
         builder: (context, child) {
           final bars = List.generate(12, (index) {
             final heightFactor = widget.isActive ? _controller.value : 0.2;
+            // Add some randomness or variation based on index for a more organic look
+            final variation = 0.5 + (index % 4) * 0.2;
+
             return Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: FractionallySizedBox(
-                  heightFactor: heightFactor * (0.5 + (index % 4) * 0.2),
-                  alignment: Alignment.bottomCenter,
+                  heightFactor: heightFactor * variation,
+                  alignment: Alignment.center,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: widget.isActive
-                          ? Colors.redAccent
-                          : Colors.grey.shade400,
+                          ? primaryColor.withValues(alpha: 0.8)
+                          : Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -115,7 +142,7 @@ class _WaveformState extends State<_Waveform>
             );
           });
           return Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: bars,
           );
         },
@@ -169,11 +196,42 @@ class _RecordingTimerState extends State<_RecordingTimer> {
     final duration = Duration(seconds: _seconds);
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return Text(
-      widget.startedAt == null ? '00:00' : '$minutes:$seconds',
-      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: widget.startedAt == null ? Colors.grey : Colors.redAccent,
+
+    final isRecording = widget.startedAt != null;
+    final color = isRecording
+        ? Theme.of(context).colorScheme.error
+        : Theme.of(context).colorScheme.outline;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isRecording) ...[
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Text(
+            widget.startedAt == null ? '00:00' : '$minutes:$seconds',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontFeatures: [const FontFeature.tabularFigures()],
+            ),
           ),
+        ],
+      ),
     );
   }
 }

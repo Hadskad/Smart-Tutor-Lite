@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../injection_container.dart';
 import '../../../study_mode/presentation/bloc/study_mode_bloc.dart';
@@ -9,6 +10,7 @@ import '../bloc/transcription_bloc.dart';
 import '../bloc/transcription_event.dart';
 import '../bloc/transcription_state.dart';
 import '../widgets/audio_recorder_widget.dart';
+import 'transcription_detail_page.dart';
 
 class TranscriptionPage extends StatefulWidget {
   const TranscriptionPage({super.key});
@@ -41,7 +43,11 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
         listener: (context, state) {
           if (state is TranscriptionError) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message)),
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: Theme.of(context).colorScheme.error,
+                behavior: SnackBarBehavior.floating,
+              ),
             );
           } else if (state is TranscriptionSuccess) {
             final metrics = state.metrics;
@@ -49,25 +55,80 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                 ? 'Transcription completed'
                 : 'Transcribed in ${metrics.durationMs}ms';
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(message)),
+              SnackBar(
+                content: Text(message),
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                behavior: SnackBarBehavior.floating,
+              ),
             );
           }
         },
         builder: (context, state) {
           return Scaffold(
             appBar: AppBar(
-              title: const Text('Transcription'),
+              title: const Text('Record Lectures -> Notes'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.history),
+                  onPressed: () {
+                    // Placeholder for history filter or settings
+                  },
+                  tooltip: 'History',
+                ),
+              ],
             ),
-            body: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  const AudioRecorderWidget(),
-                  const SizedBox(height: 24),
-                  _buildStatus(state),
-                  const SizedBox(height: 16),
-                  Expanded(child: _buildHistory(state.history)),
-                ],
+            body: SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Enhanced Recorder Widget Container
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 20,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outline
+                                  .withValues(alpha: 0.1),
+                            ),
+                          ),
+                          child: const AudioRecorderWidget(),
+                        ),
+                        const SizedBox(height: 24),
+
+                        _buildStatus(state),
+                        const SizedBox(height: 24),
+
+                        Row(
+                          children: [
+                            Text(
+                              'Recent Transcriptions',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const Spacer(),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        Expanded(child: _buildHistory(state.history)),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           );
@@ -78,30 +139,30 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
 
   Widget _buildStatus(TranscriptionState state) {
     if (state is TranscriptionRecording) {
-      return _StatusChip(
+      return _StatusContainer(
         icon: Icons.mic,
-        color: Colors.redAccent,
-        label: 'Recording…',
+        color: Theme.of(context).colorScheme.error,
+        label: 'Recording in progress...',
       );
     }
     if (state is TranscriptionProcessing) {
-      return const _StatusChip(
-        icon: Icons.cloud_upload,
-        color: Colors.orange,
-        label: 'Processing audio…',
+      return _StatusContainer(
+        icon: Icons.cloud_upload_rounded,
+        color: Theme.of(context).colorScheme.tertiary,
+        label: 'Processing audio...',
       );
     }
     if (state is TranscriptionSuccess) {
-      return _StatusChip(
-        icon: Icons.check_circle,
-        color: Colors.green,
-        label: 'Latest transcription ready',
+      return _StatusContainer(
+        icon: Icons.check_circle_rounded,
+        color: Theme.of(context).colorScheme.secondary,
+        label: 'Transcription ready',
       );
     }
     if (state is TranscriptionError) {
-      return _StatusChip(
-        icon: Icons.error_outline,
-        color: Colors.red,
+      return _StatusContainer(
+        icon: Icons.error_outline_rounded,
+        color: Theme.of(context).colorScheme.error,
         label: state.message,
       );
     }
@@ -116,20 +177,19 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
       numFlashcards: 10,
     ));
 
-    // Show dialog to navigate to study mode
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Flashcards Generating'),
+        title: const Text('Generating Flashcards'),
         content: const Text(
-          'Your flashcards are being generated. Go to Study Mode to view them when ready.',
+          'Your flashcards are being created. Visit Study Mode to practice once they are ready.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: const Text('Dismiss'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () {
               Navigator.pop(context);
               Navigator.pushNamed(context, '/study-mode');
@@ -143,53 +203,166 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
 
   Widget _buildHistory(List<Transcription> history) {
     if (history.isEmpty) {
-      return const Center(
-        child: Text('No transcriptions yet. Record something to get started!'),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.mic_none_rounded,
+              size: 64,
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No transcriptions yet',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Record something to get started!',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
       );
     }
+
     return ListView.separated(
       itemCount: history.length,
-      separatorBuilder: (_, __) => const Divider(),
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final transcription = history[index];
         return Card(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.graphic_eq),
-                title: Text(
-                  transcription.text,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          margin: EdgeInsets.zero,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TranscriptionDetailPage(
+                    transcription: transcription,
+                  ),
                 ),
-                subtitle: Text(
-                  '${transcription.timestamp} • ${(transcription.confidence * 100).toStringAsFixed(1)}% confidence',
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.play_arrow),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Audio playback coming soon.'),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              ButtonBar(
-                alignment: MainAxisAlignment.start,
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextButton.icon(
-                    icon: const Icon(Icons.style, size: 18),
-                    label: const Text('Generate Flashcards'),
-                    onPressed: () {
-                      _generateFlashcards(transcription.id, 'transcription');
-                    },
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.graphic_eq,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              DateFormat.yMMMd()
+                                  .format(transcription.timestamp),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .secondary
+                                    .withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${(transcription.confidence * 100).toStringAsFixed(0)}% Accuracy',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .secondary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.play_circle_outline_rounded),
+                        color: Theme.of(context).colorScheme.primary,
+                        tooltip: 'Play Audio',
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Audio playback coming soon.'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    transcription.text,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          height: 1.5,
+                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.style_outlined, size: 18),
+                      label: const Text('Create Flashcards'),
+                      onPressed: () {
+                        _generateFlashcards(transcription.id, 'transcription');
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.tertiary,
+                      ),
+                    ),
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         );
       },
@@ -197,8 +370,8 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({
+class _StatusContainer extends StatelessWidget {
+  const _StatusContainer({
     required this.icon,
     required this.color,
     required this.label,
@@ -214,20 +387,23 @@ class _StatusChip extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withValues(alpha: 0.2),
+        ),
       ),
       child: Row(
         children: [
-          Icon(icon, color: color),
+          Icon(icon, color: color, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               label,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: color),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
           ),
         ],

@@ -57,7 +57,11 @@ class _StudyModePageState extends State<StudyModePage> {
           listener: (context, state) {
             if (state is StudyModeError) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.message)),
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             }
           },
@@ -94,7 +98,12 @@ class _FlashcardsList extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.style, size: 64, color: Colors.grey.shade400),
+            Icon(
+              Icons.style,
+              size: 64,
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.7),
+            ),
             const SizedBox(height: 16),
             Text(
               'No flashcards yet',
@@ -104,7 +113,7 @@ class _FlashcardsList extends StatelessWidget {
             Text(
               'Generate flashcards from summaries or transcriptions',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
               textAlign: TextAlign.center,
             ),
@@ -125,10 +134,16 @@ class _FlashcardsList extends StatelessWidget {
       children: [
         // Study all button
         Card(
-          color: Colors.blue.shade50,
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
           child: ListTile(
-            leading: const Icon(Icons.play_circle_filled, size: 48),
-            title: const Text('Study All Flashcards'),
+            leading: Icon(
+              Icons.play_circle_filled,
+              size: 48,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            title: const Text(
+              'Study All Flashcards',
+            ),
             subtitle: Text('${flashcards.length} cards'),
             trailing: const Icon(Icons.arrow_forward_ios),
             onTap: () {
@@ -166,7 +181,9 @@ class _FlashcardsList extends StatelessWidget {
                     subtitle: Text(
                       flashcard.isKnown ? 'Known' : 'Unknown',
                       style: TextStyle(
-                        color: flashcard.isKnown ? Colors.green : Colors.orange,
+                        color: flashcard.isKnown
+                            ? Theme.of(context).colorScheme.secondary
+                            : Theme.of(context).colorScheme.tertiary,
                       ),
                     ),
                     trailing: flashcard.reviewCount > 0
@@ -210,4 +227,3 @@ class _FlashcardsList extends StatelessWidget {
     );
   }
 }
-

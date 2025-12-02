@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Modern Indigo Palette
-  static const _primary = Color(0xFF4F46E5); // Indigo 600
-  static const _secondary = Color(0xFF0D9488); // Teal 600
-  static const _tertiary = Color(0xFFF59E0B); // Amber 500
-  static const _error = Color(0xFFEF4444); // Red 500
-  
-  // Backgrounds
-  static const _background = Color(0xFFF9FAFB); // Cool Gray 50
+  // Brand-aligned palette (logo-inspired)
+  // Primary: deep navy (cap/book)
+  static const _primary = Color(0xFF1F3C5A);
+  // Secondary: warm gold (person accent)
+  static const _secondary = Color(0xFFF4A623);
+  // Tertiary: soft teal accent for subtle highlights
+  static const _tertiary = Color(0xFF7FB7C9);
+  static const _error = Color(0xFFEF4444);
+
+  // Backgrounds: soft cream like the logo background
+  static const _background = Color(0xFFFFF7E9);
   static const _surface = Colors.white;
 
   static ThemeData get light {

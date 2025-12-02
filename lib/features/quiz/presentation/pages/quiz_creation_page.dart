@@ -66,7 +66,8 @@ class _QuizCreationPageState extends State<QuizCreationPage> {
 
       // Load transcriptions
       final transcriptionRepo = getIt<TranscriptionRepository>();
-      final transcriptionsResult = await transcriptionRepo.getAllTranscriptions();
+      final transcriptionsResult =
+          await transcriptionRepo.getAllTranscriptions();
       transcriptionsResult.fold(
         (_) => {},
         (transcriptions) {
@@ -92,8 +93,13 @@ class _QuizCreationPageState extends State<QuizCreationPage> {
 
   void _generateQuiz() {
     if (_selectedSourceId == null) {
+      final colorScheme = Theme.of(context).colorScheme;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a source')),
+        SnackBar(
+          content: const Text('Please select a source'),
+          backgroundColor: colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -120,7 +126,11 @@ class _QuizCreationPageState extends State<QuizCreationPage> {
           listener: (context, state) {
             if (state is QuizError) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.message)),
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             } else if (state is QuizLoaded) {
               // Navigate to quiz taking page
@@ -196,9 +206,8 @@ class _QuizCreationPageState extends State<QuizCreationPage> {
   }
 
   Widget _buildSourceSelector() {
-    final sources = _selectedSourceType == 'transcription'
-        ? _transcriptions
-        : _summaries;
+    final sources =
+        _selectedSourceType == 'transcription' ? _transcriptions : _summaries;
 
     return Card(
       child: Padding(
@@ -327,4 +336,3 @@ class _QuizCreationPageState extends State<QuizCreationPage> {
     );
   }
 }
-

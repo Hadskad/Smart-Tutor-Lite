@@ -130,7 +130,6 @@ std::string RunWhisperInference(
   params.temperature = 0.0f;
   params.max_tokens = 0;
   params.no_context = true;
-  params.diarize = false;
   params.offset_ms = 0;
 
   const int status = whisper_full(
@@ -164,10 +163,11 @@ std::string RunWhisperInference(
 
 extern "C" {
 
-WhisperContext *whisper_init(const char *model_path) {
+WhisperContext *whisper_wrapper_init(const char *model_path) {
   try {
 #if SMART_TUTOR_HAS_NATIVE_WHISPER
-    auto *ctx = ::whisper_init_from_file(model_path);
+    whisper_context_params cparams = whisper_context_default_params();
+    auto *ctx = ::whisper_init_from_file_with_params(model_path, cparams);
     if (ctx == nullptr) {
       throw std::runtime_error("Unable to initialize whisper.cpp model");
     }
@@ -180,12 +180,12 @@ WhisperContext *whisper_init(const char *model_path) {
     return reinterpret_cast<WhisperContext *>(impl);
 #endif
   } catch (const std::exception &ex) {
-    LOGE("whisper_init failed: %s", ex.what());
+    LOGE("whisper_wrapper_init failed: %s", ex.what());
     return nullptr;
   }
 }
 
-char *whisper_process(
+char *whisper_wrapper_process(
     WhisperContext *context,
     const int16_t *samples,
     int sample_count) {
@@ -199,7 +199,7 @@ char *whisper_process(
         RunWhisperInference(impl, samples, sample_count);
     return CopyCString(transcript);
   } catch (const std::exception &ex) {
-    LOGE("whisper_process failed: %s", ex.what());
+    LOGE("whisper_wrapper_process failed: %s", ex.what());
     return CopyCString("");
   }
 #else
@@ -210,7 +210,7 @@ char *whisper_process(
 #endif
 }
 
-void whisper_free(WhisperContext *context) {
+void whisper_wrapper_free(WhisperContext *context) {
   auto *impl = reinterpret_cast<WhisperContextImpl *>(context);
   delete impl;
 }
@@ -221,7 +221,7 @@ Java_com_smarttutor_WhisperPlugin_nativeInitModel(
     jobject /*thiz*/,
     jstring model_path) {
   const std::string path = JStringToStdString(env, model_path);
-  auto *context = whisper_init(path.c_str());
+  auto *context = whisper_wrapper_init(path.c_str());
   return reinterpret_cast<jlong>(context);
 }
 
@@ -242,7 +242,7 @@ Java_com_smarttutor_WhisperPlugin_nativeTranscribe(
     const auto bytes = ReadBinaryFile(path);
     const auto samples = ParseWavSamples(bytes);
     std::unique_ptr<char, decltype(&std::free)> transcript(
-        whisper_process(context, samples.data(),
+        whisper_wrapper_process(context, samples.data(),
                         static_cast<int>(samples.size())),
         &std::free);
     if (!transcript) {
@@ -261,7 +261,7 @@ Java_com_smarttutor_WhisperPlugin_nativeFree(
     jobject /*thiz*/,
     jlong context_ptr) {
   auto *context = reinterpret_cast<WhisperContext *>(context_ptr);
-  whisper_free(context);
+  whisper_wrapper_free(context);
 }
 
 }  // extern "C"

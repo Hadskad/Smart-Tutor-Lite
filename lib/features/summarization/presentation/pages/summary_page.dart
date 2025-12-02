@@ -54,7 +54,8 @@ class _SummaryPageState extends State<SummaryPage> {
 
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
-        final fileName = 'summaries/${DateTime.now().millisecondsSinceEpoch}.pdf';
+        final fileName =
+            'summaries/${DateTime.now().millisecondsSinceEpoch}.pdf';
 
         // Upload to Firebase Storage
         final storageRef = FirebaseStorage.instance.ref().child(fileName);
@@ -118,13 +119,22 @@ class _SummaryPageState extends State<SummaryPage> {
         ),
         body: BlocConsumer<SummaryBloc, SummaryState>(
           listener: (context, state) {
+            final colorScheme = Theme.of(context).colorScheme;
             if (state is SummaryError) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.message)),
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: colorScheme.error,
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             } else if (state is SummarySuccess) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Summary generated successfully')),
+                SnackBar(
+                  content: const Text('Summary generated successfully'),
+                  backgroundColor: colorScheme.secondary,
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             }
           },
@@ -228,8 +238,9 @@ class _SummaryPageState extends State<SummaryPage> {
 
   Widget _buildLatestSummary(SummaryState state) {
     if (state is SummarySuccess) {
+      final colorScheme = Theme.of(context).colorScheme;
       return Card(
-        color: Colors.blue.shade50,
+        color: colorScheme.secondary.withValues(alpha: 0.08),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -237,14 +248,14 @@ class _SummaryPageState extends State<SummaryPage> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.summarize, color: Colors.blue.shade700),
+                  Icon(Icons.summarize, color: colorScheme.secondary),
                   const SizedBox(width: 8),
                   Text(
                     'Latest Summary',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade900,
+                      color: colorScheme.secondary,
                     ),
                   ),
                 ],
@@ -274,23 +285,33 @@ class _SummaryPageState extends State<SummaryPage> {
     final summaries = state.summaries;
 
     if (summaries.isEmpty) {
-      return const Card(
+      final colorScheme = Theme.of(context).colorScheme;
+      return Card(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.description, size: 48, color: Colors.grey),
-                SizedBox(height: 12),
+                Icon(
+                  Icons.description,
+                  size: 48,
+                  color: colorScheme.outline.withValues(alpha: 0.7),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   'No summaries yet',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
                   'Create your first summary above',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -372,7 +393,6 @@ class _SummaryPageState extends State<SummaryPage> {
       numFlashcards: 10,
     ));
 
-    // Show dialog to navigate to study mode
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -385,7 +405,7 @@ class _SummaryPageState extends State<SummaryPage> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () {
               Navigator.pop(context);
               Navigator.pushNamed(context, '/study-mode');
