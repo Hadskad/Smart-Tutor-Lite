@@ -94,6 +94,8 @@ import 'package:smart_tutor_lite/features/transcription/domain/usecases/cancel_t
     as _i794;
 import 'package:smart_tutor_lite/features/transcription/domain/usecases/create_transcription_job.dart'
     as _i925;
+import 'package:smart_tutor_lite/features/transcription/domain/usecases/request_transcription_job_retry.dart'
+    as _i30;
 import 'package:smart_tutor_lite/features/transcription/domain/usecases/transcribe_audio.dart'
     as _i978;
 import 'package:smart_tutor_lite/features/transcription/domain/usecases/watch_transcription_job.dart'
@@ -158,6 +160,9 @@ extension GetItInjectableX on _i174.GetIt {
         _i925.CreateTranscriptionJob(gh<_i80.TranscriptionJobRepository>()));
     gh.lazySingleton<_i1047.WatchTranscriptionJob>(() =>
         _i1047.WatchTranscriptionJob(gh<_i80.TranscriptionJobRepository>()));
+    gh.lazySingleton<_i30.RequestTranscriptionJobRetry>(() =>
+        _i30.RequestTranscriptionJobRetry(
+            gh<_i80.TranscriptionJobRepository>()));
     gh.lazySingleton<_i361.Dio>(
         () => externalModule.dio(gh<_i496.AppLogger>()));
     gh.lazySingleton<_i114.ApiClient>(() => _i114.ApiClient(
@@ -194,12 +199,6 @@ extension GetItInjectableX on _i174.GetIt {
               networkInfo: gh<_i440.NetworkInfo>(),
               hive: gh<_i979.HiveInterface>(),
             ));
-    gh.factory<_i940.TranscriptionBloc>(() => _i940.TranscriptionBloc(
-          gh<_i978.TranscribeAudio>(),
-          gh<_i99.PerformanceBridge>(),
-          gh<_i861.TranscriptionRepository>(),
-          gh<_i440.NetworkInfo>(),
-        ));
     gh.lazySingleton<_i840.ConvertPdfToAudio>(
         () => _i840.ConvertPdfToAudio(gh<_i90.TtsRepository>()));
     gh.lazySingleton<_i93.ConvertTextToAudio>(
@@ -219,6 +218,16 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i889.GenerateQuiz(gh<_i291.QuizRepository>()));
     gh.lazySingleton<_i464.SubmitQuiz>(
         () => _i464.SubmitQuiz(gh<_i291.QuizRepository>()));
+    gh.factory<_i940.TranscriptionBloc>(() => _i940.TranscriptionBloc(
+          gh<_i978.TranscribeAudio>(),
+          gh<_i99.PerformanceBridge>(),
+          gh<_i861.TranscriptionRepository>(),
+          gh<_i440.NetworkInfo>(),
+          gh<_i925.CreateTranscriptionJob>(),
+          gh<_i1047.WatchTranscriptionJob>(),
+          gh<_i794.CancelTranscriptionJob>(),
+          gh<_i30.RequestTranscriptionJobRetry>(),
+        ));
     gh.lazySingleton<_i380.GenerateFlashcards>(
         () => _i380.GenerateFlashcards(gh<_i835.StudyModeRepository>()));
     gh.lazySingleton<_i517.GetProgress>(

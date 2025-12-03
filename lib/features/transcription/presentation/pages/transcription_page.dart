@@ -6,6 +6,7 @@ import '../../../../injection_container.dart';
 import '../../../study_mode/presentation/bloc/study_mode_bloc.dart';
 import '../../../study_mode/presentation/bloc/study_mode_event.dart';
 import '../../domain/entities/transcription.dart';
+import '../../domain/entities/transcription_job.dart';
 import '../bloc/transcription_bloc.dart';
 import '../bloc/transcription_event.dart';
 import '../bloc/transcription_state.dart';
@@ -150,6 +151,9 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
   }
 
   Widget _buildStatus(TranscriptionState state) {
+    if (state is CloudTranscriptionState) {
+      return _CloudTranscriptionStatus(job: state.job);
+    }
     if (state is TranscriptionRecording) {
       return _StatusContainer(
         icon: Icons.mic,
@@ -431,5 +435,105 @@ class _StatusContainer extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _CloudTranscriptionStatus extends StatelessWidget {
+  const _CloudTranscriptionStatus({required this.job});
+
+  final TranscriptionJob job;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colorForStatus(context, job.status);
+    final label = _labelForStatus(job);
+    final progress = job.progress != null ? job.progress!.clamp(0, 100) / 100 : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _StatusContainer(
+          icon: _iconForStatus(job.status),
+          color: color,
+          label: label,
+        ),
+        const SizedBox(height: 12),
+        LinearProgressIndicator(
+          value: progress,
+          minHeight: 6,
+          backgroundColor: color.withValues(alpha: 0.1),
+          valueColor: AlwaysStoppedAnimation<Color>(color),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            if (!job.isTerminal)
+              TextButton.icon(
+                onPressed: () => context
+                    .read<TranscriptionBloc>()
+                    .add(const CancelCloudTranscription()),
+                icon: const Icon(Icons.cancel_outlined),
+                label: const Text('Cancel'),
+              ),
+            const Spacer(),
+            if (job.canRetry)
+              FilledButton.icon(
+                onPressed: () => context
+                    .read<TranscriptionBloc>()
+                    .add(RetryCloudTranscription(job.id)),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static String _labelForStatus(TranscriptionJob job) {
+    switch (job.status) {
+      case TranscriptionJobStatus.pending:
+        return 'Preparing upload...';
+      case TranscriptionJobStatus.uploading:
+        return 'Uploading audio to the cloud...';
+      case TranscriptionJobStatus.processing:
+        return 'Transcribing with Soniox...';
+      case TranscriptionJobStatus.generatingNote:
+        return 'Generating smart notes...';
+      case TranscriptionJobStatus.done:
+        return 'Cloud transcription complete';
+      case TranscriptionJobStatus.error:
+        return job.errorMessage ?? 'Cloud transcription failed';
+    }
+  }
+
+  static IconData _iconForStatus(TranscriptionJobStatus status) {
+    switch (status) {
+      case TranscriptionJobStatus.pending:
+      case TranscriptionJobStatus.uploading:
+        return Icons.cloud_upload_outlined;
+      case TranscriptionJobStatus.processing:
+        return Icons.cloud_sync_outlined;
+      case TranscriptionJobStatus.generatingNote:
+        return Icons.auto_stories_outlined;
+      case TranscriptionJobStatus.done:
+        return Icons.cloud_done_outlined;
+      case TranscriptionJobStatus.error:
+        return Icons.cloud_off_outlined;
+    }
+  }
+
+  static Color _colorForStatus(
+    BuildContext context,
+    TranscriptionJobStatus status,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    switch (status) {
+      case TranscriptionJobStatus.error:
+        return scheme.error;
+      case TranscriptionJobStatus.done:
+        return scheme.secondary;
+      default:
+        return scheme.primary;
+    }
   }
 }

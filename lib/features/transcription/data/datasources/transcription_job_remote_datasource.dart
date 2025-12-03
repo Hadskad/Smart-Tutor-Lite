@@ -19,6 +19,8 @@ abstract class TranscriptionJobRemoteDataSource {
   Stream<TranscriptionJobModel> watchJob(String jobId);
 
   Future<void> cancelJob(String jobId, {String? reason});
+
+  Future<void> requestRetry(String jobId, {String? reason});
 }
 
 @LazySingleton(as: TranscriptionJobRemoteDataSource)
@@ -51,14 +53,24 @@ class TranscriptionJobRemoteDataSourceImpl
     final docRef = _jobsCollection.doc(jobId);
 
     await docRef.set({
-      'mode': request.mode.name,
-      'status': TranscriptionJobStatus.uploading.name,
+      'userId': request.userId,
+      'mode': request.mode.label,
+      'status': TranscriptionJobStatus.pending.label,
       'audioStoragePath': storagePath,
+      'localAudioPath': request.localAudioPath ?? p.basename(file.path),
       'durationSeconds': request.duration.inSeconds,
       'approxSizeBytes': request.fileSizeBytes,
       'metadata': request.metadata,
       'progress': 0.0,
+      'canRetry': false,
       'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await docRef.update({
+      'status': TranscriptionJobStatus.uploading.label,
+      'progress': 5.0,
+      'uploadStartedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
@@ -73,10 +85,10 @@ class TranscriptionJobRemoteDataSourceImpl
     await _storage.ref(storagePath).putFile(file, fileMetadata);
 
     await docRef.update({
-      'status': TranscriptionJobStatus.processing.name,
+      'status': TranscriptionJobStatus.processing.label,
       'uploadCompletedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-      'progress': 0.05,
+      'progress': 15.0,
     });
 
     final snapshot = await docRef.get();
@@ -96,9 +108,20 @@ class TranscriptionJobRemoteDataSourceImpl
   @override
   Future<void> cancelJob(String jobId, {String? reason}) {
     return _jobsCollection.doc(jobId).update({
-      'status': TranscriptionJobStatus.error.name,
+      'status': TranscriptionJobStatus.error.label,
       'errorCode': 'client_cancelled',
       'errorMessage': reason ?? 'Cancelled by user',
+      'updatedAt': FieldValue.serverTimestamp(),
+      'canRetry': false,
+    });
+  }
+
+  @override
+  Future<void> requestRetry(String jobId, {String? reason}) {
+    return _jobsCollection.doc(jobId).update({
+      'retryRequestedAt': FieldValue.serverTimestamp(),
+      'retryReason': reason,
+      'canRetry': false,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

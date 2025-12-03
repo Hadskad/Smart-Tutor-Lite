@@ -1,4 +1,8 @@
+import 'package:dartz/dartz.dart';
 import 'package:equatable/equatable.dart';
+
+import '../../../../core/errors/failures.dart';
+import '../../domain/entities/transcription_job.dart';
 
 abstract class TranscriptionEvent extends Equatable {
   const TranscriptionEvent();
@@ -24,6 +28,15 @@ class TranscribeAudio extends TranscriptionEvent {
   List<Object?> get props => [audioPath];
 }
 
+class TranscriptionJobSnapshotReceived extends TranscriptionEvent {
+  const TranscriptionJobSnapshotReceived(this.result);
+
+  final Either<Failure, TranscriptionJob> result;
+
+  @override
+  List<Object?> get props => [result];
+}
+
 class RecordingMetricsUpdated extends TranscriptionEvent {
   const RecordingMetricsUpdated({
     required this.estimatedSizeBytes,
@@ -39,4 +52,22 @@ class RecordingMetricsUpdated extends TranscriptionEvent {
 
 class LoadTranscriptions extends TranscriptionEvent {
   const LoadTranscriptions();
+}
+
+class CancelCloudTranscription extends TranscriptionEvent {
+  const CancelCloudTranscription({this.reason});
+
+  final String? reason;
+
+  @override
+  List<Object?> get props => [reason];
+}
+
+class RetryCloudTranscription extends TranscriptionEvent {
+  const RetryCloudTranscription(this.jobId);
+
+  final String jobId;
+
+  @override
+  List<Object?> get props => [jobId];
 }

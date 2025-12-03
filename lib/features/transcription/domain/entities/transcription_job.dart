@@ -1,27 +1,39 @@
 import 'package:equatable/equatable.dart';
 
 enum TranscriptionJobStatus {
-  pending,
-  uploading,
-  processing,
-  generatingNote,
-  done,
-  error,
+  pending('pending'),
+  uploading('uploading'),
+  processing('processing'),
+  generatingNote('generating_note'),
+  done('done'),
+  error('error'),
+  ;
+
+  const TranscriptionJobStatus(this.label);
+
+  final String label;
 }
 
 enum TranscriptionJobMode {
-  onlineSoniox,
-  offlineWhisper,
+  onlineSoniox('online_soniox'),
+  offlineWhisper('offline_whisper'),
+  ;
+
+  const TranscriptionJobMode(this.label);
+
+  final String label;
 }
 
 class TranscriptionJob extends Equatable {
   const TranscriptionJob({
+    required this.userId,
     required this.id,
     required this.status,
     required this.mode,
     required this.createdAt,
     required this.updatedAt,
     this.audioStoragePath,
+    this.localAudioPath,
     this.duration,
     this.approxSizeBytes,
     this.progress,
@@ -30,14 +42,17 @@ class TranscriptionJob extends Equatable {
     this.transcriptId,
     this.noteId,
     this.metadata = const {},
+    this.canRetry = false,
   });
 
+  final String? userId;
   final String id;
   final TranscriptionJobStatus status;
   final TranscriptionJobMode mode;
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? audioStoragePath;
+  final String? localAudioPath;
   final Duration? duration;
   final int? approxSizeBytes;
   final double? progress;
@@ -46,6 +61,7 @@ class TranscriptionJob extends Equatable {
   final String? transcriptId;
   final String? noteId;
   final Map<String, dynamic> metadata;
+  final bool canRetry;
 
   bool get isTerminal => switch (status) {
         TranscriptionJobStatus.done ||
@@ -56,12 +72,14 @@ class TranscriptionJob extends Equatable {
 
   @override
   List<Object?> get props => [
+        userId,
         id,
         status,
         mode,
         createdAt,
         updatedAt,
         audioStoragePath,
+        localAudioPath,
         duration,
         approxSizeBytes,
         progress,
@@ -70,6 +88,7 @@ class TranscriptionJob extends Equatable {
         transcriptId,
         noteId,
         metadata,
+        canRetry,
       ];
 }
 

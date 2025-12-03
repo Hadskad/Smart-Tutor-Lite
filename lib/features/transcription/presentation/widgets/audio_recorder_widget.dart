@@ -20,6 +20,7 @@ class AudioRecorderWidget extends StatelessWidget {
             isRecording ? state.estimatedSizeBytes : null;
         final isInputTooLow =
             isRecording ? state.isInputTooLow : false;
+        final isCloudBusy = state is CloudTranscriptionState;
         final primaryColor = Theme.of(context).colorScheme.primary;
         final errorColor = Theme.of(context).colorScheme.error;
 
@@ -54,14 +55,16 @@ class AudioRecorderWidget extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                onPressed: () {
-                  final bloc = context.read<TranscriptionBloc>();
-                  bloc.add(
-                    isRecording
-                        ? const StopRecording()
-                        : const StartRecording(),
-                  );
-                },
+                onPressed: isCloudBusy && !isRecording
+                    ? null
+                    : () {
+                        final bloc = context.read<TranscriptionBloc>();
+                        bloc.add(
+                          isRecording
+                              ? const StopRecording()
+                              : const StartRecording(),
+                        );
+                      },
                 icon:
                     Icon(isRecording ? Icons.stop_rounded : Icons.mic_rounded),
                 label: Text(

@@ -5,11 +5,13 @@ import '../../domain/entities/transcription_job.dart';
 class TranscriptionJobModel extends TranscriptionJob {
   const TranscriptionJobModel({
     required super.id,
+    required super.userId,
     required super.status,
     required super.mode,
     required super.createdAt,
     required super.updatedAt,
     super.audioStoragePath,
+    super.localAudioPath,
     super.duration,
     super.approxSizeBytes,
     super.progress,
@@ -18,6 +20,7 @@ class TranscriptionJobModel extends TranscriptionJob {
     super.transcriptId,
     super.noteId,
     super.metadata,
+    super.canRetry = false,
   });
 
   factory TranscriptionJobModel.fromSnapshot(
@@ -26,11 +29,13 @@ class TranscriptionJobModel extends TranscriptionJob {
     final data = snapshot.data() ?? <String, dynamic>{};
     return TranscriptionJobModel(
       id: snapshot.id,
+      userId: data['userId'] as String?,
       status: _parseStatus(data['status'] as String?),
       mode: _parseMode(data['mode'] as String?),
       createdAt: _parseTimestamp(data['createdAt']) ?? DateTime.now(),
       updatedAt: _parseTimestamp(data['updatedAt']) ?? DateTime.now(),
       audioStoragePath: data['audioStoragePath'] as String?,
+      localAudioPath: data['localAudioPath'] as String?,
       duration: _parseDuration(data['durationSeconds']),
       approxSizeBytes: (data['approxSizeBytes'] as num?)?.toInt(),
       progress: (data['progress'] as num?)?.toDouble(),
@@ -39,13 +44,16 @@ class TranscriptionJobModel extends TranscriptionJob {
       transcriptId: data['transcriptId'] as String?,
       noteId: data['noteId'] as String?,
       metadata: Map<String, dynamic>.from(data['metadata'] as Map? ?? {}),
+      canRetry: data['canRetry'] as bool? ?? false,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'status': status.name,
-        'mode': mode.name,
+        'userId': userId,
+        'status': status.label,
+        'mode': mode.label,
         'audioStoragePath': audioStoragePath,
+        'localAudioPath': localAudioPath,
         'durationSeconds': duration?.inSeconds,
         'approxSizeBytes': approxSizeBytes,
         'progress': progress,
@@ -54,20 +62,21 @@ class TranscriptionJobModel extends TranscriptionJob {
         'transcriptId': transcriptId,
         'noteId': noteId,
         'metadata': metadata,
+        'canRetry': canRetry,
         'createdAt': Timestamp.fromDate(createdAt),
         'updatedAt': Timestamp.fromDate(updatedAt),
       };
 
   static TranscriptionJobStatus _parseStatus(String? raw) {
     return TranscriptionJobStatus.values.firstWhere(
-      (value) => value.name == raw,
+      (value) => value.label == raw || value.name == raw,
       orElse: () => TranscriptionJobStatus.pending,
     );
   }
 
   static TranscriptionJobMode _parseMode(String? raw) {
     return TranscriptionJobMode.values.firstWhere(
-      (value) => value.name == raw,
+      (value) => value.label == raw || value.name == raw,
       orElse: () => TranscriptionJobMode.onlineSoniox,
     );
   }

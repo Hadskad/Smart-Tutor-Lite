@@ -12,5 +12,7 @@ abstract class TranscriptionJobRepository {
   Stream<Either<Failure, TranscriptionJob>> watchJob(String jobId);
 
   Future<Either<Failure, Unit>> cancelJob(String jobId, {String? reason});
+
+  Future<Either<Failure, Unit>> requestRetry(String jobId, {String? reason});
 }
 

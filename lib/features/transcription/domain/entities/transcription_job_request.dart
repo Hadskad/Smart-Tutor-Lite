@@ -10,6 +10,8 @@ class TranscriptionJobRequest extends Equatable {
     this.displayName,
     this.metadata = const {},
     this.mode = TranscriptionJobMode.onlineSoniox,
+    this.userId,
+    this.localAudioPath,
   });
 
   final String localFilePath;
@@ -18,6 +20,8 @@ class TranscriptionJobRequest extends Equatable {
   final String? displayName;
   final Map<String, dynamic> metadata;
   final TranscriptionJobMode mode;
+  final String? userId;
+  final String? localAudioPath;
 
   @override
   List<Object?> get props => [
@@ -27,6 +31,8 @@ class TranscriptionJobRequest extends Equatable {
         displayName,
         metadata,
         mode,
+        userId,
+        localAudioPath,
       ];
 }
 

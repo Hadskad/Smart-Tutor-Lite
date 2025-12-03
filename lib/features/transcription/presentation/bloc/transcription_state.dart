@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
-import '../../../transcription/domain/entities/transcription.dart';
+import '../../domain/entities/transcription.dart';
+import '../../domain/entities/transcription_job.dart';
 import '../../../../native_bridge/performance_bridge.dart';
 
 abstract class TranscriptionState extends Equatable {
@@ -110,4 +111,23 @@ class TranscriptionError extends TranscriptionState {
 
   @override
   List<Object?> get props => [...super.props, message];
+}
+
+class CloudTranscriptionState extends TranscriptionState {
+  const CloudTranscriptionState({
+    required this.job,
+    super.history = const [],
+  });
+
+  final TranscriptionJob job;
+
+  CloudTranscriptionState copyWithJob(TranscriptionJob updatedJob) {
+    return CloudTranscriptionState(
+      job: updatedJob,
+      history: history,
+    );
+  }
+
+  @override
+  List<Object?> get props => [...super.props, job];
 }
