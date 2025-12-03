@@ -70,7 +70,13 @@ class TranscriptionRepositoryImpl implements TranscriptionRepository {
     } on Failure catch (failure) {
       final connected = await _networkInfo.isConnected;
       if (!connected) {
-        return Left(failure);
+        return Left(
+          NetworkFailure(
+            message:
+                'No internet connection for cloud transcription. Please reconnect or retry once you are online.',
+            cause: failure,
+          ),
+        );
       }
       try {
         final remoteModel = await _remoteDataSource.transcribeAudio(audioPath);

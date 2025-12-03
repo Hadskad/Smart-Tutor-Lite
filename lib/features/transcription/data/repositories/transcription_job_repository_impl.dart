@@ -46,7 +46,9 @@ class TranscriptionJobRepositoryImpl implements TranscriptionJobRepository {
   Stream<Either<Failure, TranscriptionJob>> watchJob(String jobId) {
     return _remoteDataSource
         .watchJob(jobId)
-        .map<Either<Failure, TranscriptionJob>>(Either.right)
+        .map<Either<Failure, TranscriptionJob>>(
+          (job) => Right<Failure, TranscriptionJob>(job),
+        )
         .transform(
       StreamTransformer.fromHandlers(
         handleError: (error, stackTrace, sink) {

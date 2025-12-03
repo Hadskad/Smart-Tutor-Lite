@@ -16,6 +16,10 @@ class AudioRecorderWidget extends StatelessWidget {
       builder: (context, state) {
         final isRecording = state is TranscriptionRecording;
         final startedAt = isRecording ? state.startedAt : null;
+        final approxSizeBytes =
+            isRecording ? state.estimatedSizeBytes : null;
+        final isInputTooLow =
+            isRecording ? state.isInputTooLow : false;
         final primaryColor = Theme.of(context).colorScheme.primary;
         final errorColor = Theme.of(context).colorScheme.error;
 
@@ -25,6 +29,17 @@ class AudioRecorderWidget extends StatelessWidget {
             _Waveform(isActive: isRecording),
             const SizedBox(height: 20),
             _RecordingTimer(startedAt: startedAt),
+            if (isRecording && approxSizeBytes != null) ...[
+              const SizedBox(height: 8),
+              _RecordingInfoChip(
+                icon: Icons.sd_card_rounded,
+                label: 'Approx. size: ${_formatBytes(approxSizeBytes)}',
+              ),
+            ],
+            if (isRecording && isInputTooLow) ...[
+              const SizedBox(height: 12),
+              const _LowInputWarning(),
+            ],
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -59,10 +74,27 @@ class AudioRecorderWidget extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            const _RecordingTip(),
           ],
         );
       },
     );
+  }
+
+  static String _formatBytes(int? bytes) {
+    if (bytes == null || bytes <= 0) {
+      return '0 KB';
+    }
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    double size = bytes.toDouble();
+    var unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    final precision = unitIndex <= 1 ? 0 : 1;
+    return '${size.toStringAsFixed(precision)} ${units[unitIndex]}';
   }
 }
 
@@ -232,6 +264,104 @@ class _RecordingTimerState extends State<_RecordingTimer> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RecordingInfoChip extends StatelessWidget {
+  const _RecordingInfoChip({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final outline = Theme.of(context).colorScheme.outline;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: outline.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: outline),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: outline,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LowInputWarning extends StatelessWidget {
+  const _LowInputWarning();
+
+  @override
+  Widget build(BuildContext context) {
+    final warningColor = Theme.of(context).colorScheme.tertiary;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: warningColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: warningColor.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.volume_mute_rounded, color: warningColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'We are hearing very little audio. Move closer or uncover the mic.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: warningColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecordingTip extends StatelessWidget {
+  const _RecordingTip();
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          Icons.lightbulb_outline_rounded,
+          size: 18,
+          color: textColor,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Tip: Keep the microphone unobstructed—do not cover the speaker while recording.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: textColor,
+                  height: 1.4,
+                ),
+          ),
+        ),
+      ],
     );
   }
 }

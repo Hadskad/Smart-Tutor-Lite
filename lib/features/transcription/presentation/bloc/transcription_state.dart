@@ -18,18 +18,60 @@ class TranscriptionInitial extends TranscriptionState {
   const TranscriptionInitial({super.history = const []});
 }
 
+enum TranscriptionNoticeSeverity { info, warning }
+
+class TranscriptionNotice extends TranscriptionState {
+  const TranscriptionNotice({
+    required this.message,
+    required this.severity,
+    super.history = const [],
+  });
+
+  final String message;
+  final TranscriptionNoticeSeverity severity;
+
+  @override
+  List<Object?> get props => [...super.props, message, severity];
+}
+
 class TranscriptionRecording extends TranscriptionState {
   const TranscriptionRecording({
     required this.startedAt,
     this.filePath,
+    this.estimatedSizeBytes = 0,
+    this.isInputTooLow = false,
     super.history = const [],
   });
 
   final DateTime startedAt;
   final String? filePath;
+  final int estimatedSizeBytes;
+  final bool isInputTooLow;
+
+  TranscriptionRecording copyWith({
+    DateTime? startedAt,
+    String? filePath,
+    int? estimatedSizeBytes,
+    bool? isInputTooLow,
+    List<Transcription>? history,
+  }) {
+    return TranscriptionRecording(
+      startedAt: startedAt ?? this.startedAt,
+      filePath: filePath ?? this.filePath,
+      estimatedSizeBytes: estimatedSizeBytes ?? this.estimatedSizeBytes,
+      isInputTooLow: isInputTooLow ?? this.isInputTooLow,
+      history: history ?? this.history,
+    );
+  }
 
   @override
-  List<Object?> get props => [...super.props, startedAt, filePath];
+  List<Object?> get props => [
+        ...super.props,
+        startedAt,
+        filePath,
+        estimatedSizeBytes,
+        isInputTooLow,
+      ];
 }
 
 class TranscriptionProcessing extends TranscriptionState {
@@ -47,9 +89,9 @@ class TranscriptionProcessing extends TranscriptionState {
 class TranscriptionSuccess extends TranscriptionState {
   const TranscriptionSuccess({
     required this.transcription,
-    required List<Transcription> history,
     this.metrics,
-  }) : super(history: history);
+    required super.history,
+  });
 
   final Transcription transcription;
   final PerformanceMetrics? metrics;

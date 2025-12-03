@@ -194,15 +194,16 @@ extension GetItInjectableX on _i174.GetIt {
               networkInfo: gh<_i440.NetworkInfo>(),
               hive: gh<_i979.HiveInterface>(),
             ));
-    gh.lazySingleton<_i840.ConvertPdfToAudio>(
-        () => _i840.ConvertPdfToAudio(gh<_i90.TtsRepository>()));
-    gh.lazySingleton<_i93.ConvertTextToAudio>(
-        () => _i93.ConvertTextToAudio(gh<_i90.TtsRepository>()));
     gh.factory<_i940.TranscriptionBloc>(() => _i940.TranscriptionBloc(
           gh<_i978.TranscribeAudio>(),
           gh<_i99.PerformanceBridge>(),
           gh<_i861.TranscriptionRepository>(),
+          gh<_i440.NetworkInfo>(),
         ));
+    gh.lazySingleton<_i840.ConvertPdfToAudio>(
+        () => _i840.ConvertPdfToAudio(gh<_i90.TtsRepository>()));
+    gh.lazySingleton<_i93.ConvertTextToAudio>(
+        () => _i93.ConvertTextToAudio(gh<_i90.TtsRepository>()));
     gh.lazySingleton<_i835.StudyModeRepository>(
         () => _i848.StudyModeRepositoryImpl(
               remoteDataSource: gh<_i794.FlashcardRemoteDataSource>(),

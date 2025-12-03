@@ -41,8 +41,9 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
       value: _bloc,
       child: BlocConsumer<TranscriptionBloc, TranscriptionState>(
         listener: (context, state) {
+          final messenger = ScaffoldMessenger.of(context);
           if (state is TranscriptionError) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            messenger.showSnackBar(
               SnackBar(
                 content: Text(state.message),
                 backgroundColor: Theme.of(context).colorScheme.error,
@@ -54,10 +55,21 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
             final message = metrics == null
                 ? 'Transcription completed'
                 : 'Transcribed in ${metrics.durationMs}ms';
-            ScaffoldMessenger.of(context).showSnackBar(
+            messenger.showSnackBar(
               SnackBar(
                 content: Text(message),
                 backgroundColor: Theme.of(context).colorScheme.secondary,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          } else if (state is TranscriptionNotice) {
+            final color = state.severity == TranscriptionNoticeSeverity.warning
+                ? Theme.of(context).colorScheme.tertiary
+                : Theme.of(context).colorScheme.primary;
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: color,
                 behavior: SnackBarBehavior.floating,
               ),
             );
@@ -157,6 +169,16 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
         icon: Icons.check_circle_rounded,
         color: Theme.of(context).colorScheme.secondary,
         label: 'Transcription ready',
+      );
+    }
+    if (state is TranscriptionNotice) {
+      final color = state.severity == TranscriptionNoticeSeverity.warning
+          ? Theme.of(context).colorScheme.tertiary
+          : Theme.of(context).colorScheme.primary;
+      return _StatusContainer(
+        icon: Icons.info_outline_rounded,
+        color: color,
+        label: state.message,
       );
     }
     if (state is TranscriptionError) {

@@ -1,5 +1,5 @@
 # Compiled JavaScript files
-lib/
+
 node_modules/
 
 # TypeScript cache
@@ -16,6 +16,8 @@ firestore-debug.log
 ui-debug.log
 
 # IDE
+.dart_tool/
+.bin/
 .vscode/
 .idea/
 *.swp

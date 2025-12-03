@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/transcription_job.dart';
 
 class TranscriptionJobModel extends TranscriptionJob {
-  TranscriptionJobModel({
+  const TranscriptionJobModel({
     required super.id,
     required super.status,
     required super.mode,

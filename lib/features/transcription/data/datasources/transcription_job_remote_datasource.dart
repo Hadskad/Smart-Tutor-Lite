@@ -49,7 +49,6 @@ class TranscriptionJobRemoteDataSourceImpl
     final fileName = request.displayName ?? p.basename(file.path);
     final storagePath = 'transcription_jobs/$jobId/$fileName';
     final docRef = _jobsCollection.doc(jobId);
-    final now = DateTime.now();
 
     await docRef.set({
       'mode': request.mode.name,
