@@ -1,5 +1,7 @@
 import { openai } from '../config/openai';
 
+const GPT_MODEL = 'gpt-4.1-mini';
+
 export interface SummarizeOptions {
   text: string;
   maxLength?: number;
@@ -20,33 +22,36 @@ export interface GenerateFlashcardsOptions {
  * Summarize text using OpenAI
  */
 export async function summarizeText(options: SummarizeOptions): Promise<string> {
-  const { text, maxLength = 200 } = options;
+  const { text } = options;
 
-  const prompt = `Summarize the following text in approximately ${maxLength} words:\n\n${text}`;
+  const input = `
+<system>
+You summarize content clearly, accurately, and in a way that preserves key ideas,
+main arguments, and essential details. You avoid unnecessary filler and maintain
+the author’s intent and meaning.
+</system>
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
-    messages: [
-      {
-        role: 'system',
-        content: 'You are a helpful assistant that creates concise summaries.',
-      },
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-    max_tokens: Math.min(maxLength * 2, 500),
-    temperature: 0.7,
+<user>
+Summarize the following text. Keep the length appropriate to the content.
+If it is long, produce a detailed multi-paragraph summary. If it is short,
+use a concise paragraph.
+
+Text:
+${text}
+</user>
+`;
+
+  const response = await openai.responses.create({
+    model: GPT_MODEL,
+    input,
+    temperature: 0.3,
   });
 
-  const summary = response.choices[0]?.message?.content?.trim();
-  if (!summary) {
-    throw new Error('Summary generation failed: empty response');
-  }
-
+  const summary = extractResponseText(response);
+  if (!summary) throw new Error('Summary generation failed: empty response');
   return summary;
 }
+
 
 /**
  * Generate quiz questions from content using OpenAI
@@ -63,50 +68,62 @@ export async function generateQuiz(
 }> {
   const { content, numQuestions, difficulty } = options;
 
-  const prompt = `Generate ${numQuestions} ${difficulty} multiple-choice questions based on the following content. 
-Return a JSON array with this structure:
+  const input = `
+<system>
+You generate high-quality multiple-choice questions directly from the
+given content. Follow these rules strictly:
+
+1. Every question must be fully answerable ONLY using the provided content.
+2. No invented facts, no hallucinations.
+3. Each question must have exactly four options.
+4. Options must be plausible and not obviously wrong.
+5. Correct answer index must match the correct option.
+6. Difficulty must match the requested level (“easy”, “medium”, “hard”).
+7. Output ONLY valid JSON. No explanations, no Markdown, no text outside the JSON.
+8. Keep questions clear, unambiguous, and well-written.
+</system>
+
+<user>
+Generate ${numQuestions} ${difficulty} multiple-choice questions based strictly on the text below.
+Return a JSON array of objects with this exact structure:
+
 [
   {
-    "question": "Question text",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "question": "string",
+    "options": ["A", "B", "C", "D"],
     "correctAnswer": 0,
-    "explanation": "Why this answer is correct"
+    "explanation": "string"
   }
 ]
 
-Content:
-${content}`;
+CONTENT:
+${content}
+</user>
+`;
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
-    messages: [
-      {
-        role: 'system',
-        content: 'You are an educational assistant that creates high-quality quiz questions.',
-      },
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-    response_format: { type: 'json_object' },
-    temperature: 0.7,
+  const response = await openai.responses.create({
+    model: GPT_MODEL,
+    input,
+    temperature: 0.2, // better accuracy
   });
 
-  const responseContent = response.choices[0]?.message?.content;
-  if (!responseContent) {
-    throw new Error('Failed to generate quiz');
-  }
+  const text = extractResponseText(response);
+  if (!text) throw new Error('Failed to generate quiz');
 
   try {
-    const parsed = JSON.parse(responseContent);
+    const parsed = JSON.parse(text);
     const questions = parsed.questions ?? parsed;
     const normalized = normalizeQuizQuestions(questions, numQuestions);
     return { questions: normalized };
   } catch (error) {
-    throw new Error(`Failed to parse quiz response: ${error instanceof Error ? error.message : error}`);
+    throw new Error(
+      `Failed to parse quiz response: ${
+        error instanceof Error ? error.message : error
+      }`
+    );
   }
 }
+
 
 /**
  * Generate flashcards from content using OpenAI
@@ -128,9 +145,9 @@ Return a JSON array with this structure:
 Content:
 ${content}`;
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
-    messages: [
+  const response = await openai.responses.create({
+    model: GPT_MODEL,
+    input: [
       {
         role: 'system',
         content: 'You are an educational assistant that creates effective flashcards.',
@@ -140,11 +157,10 @@ ${content}`;
         content: prompt,
       },
     ],
-    response_format: { type: 'json_object' },
     temperature: 0.7,
   });
 
-  const contentText = response.choices[0]?.message?.content;
+  const contentText = extractResponseText(response);
   if (!contentText) {
     throw new Error('Failed to generate flashcards');
   }
@@ -277,5 +293,45 @@ function normalizeFlashcards(
   }
 
   return normalized;
+}
+
+function extractResponseText(response: any): string {
+  if (!response) {
+    throw new Error('Empty response from OpenAI');
+  }
+
+  const outputText = Array.isArray(response.output_text)
+    ? response.output_text.join('\n').trim()
+    : typeof response.output_text === 'string'
+    ? response.output_text.trim()
+    : '';
+
+  if (outputText) {
+    return outputText;
+  }
+
+  if (Array.isArray(response.output)) {
+    const chunkText = response.output
+      .flatMap((item: any) =>
+        Array.isArray(item?.content) ? item.content : [],
+      )
+      .map((content: any) => {
+        if (typeof content?.text === 'string') {
+          return content.text;
+        }
+        if (typeof content?.content === 'string') {
+          return content.content;
+        }
+        return '';
+      })
+      .join('')
+      .trim();
+
+    if (chunkText) {
+      return chunkText;
+    }
+  }
+
+  throw new Error('OpenAI response did not include any text output');
 }
 

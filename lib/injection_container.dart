@@ -1,6 +1,8 @@
 import 'package:battery_plus/battery_plus.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:injectable/injectable.dart';
@@ -42,6 +44,12 @@ abstract class ExternalModule {
 
   @lazySingleton
   Battery battery() => Battery();
+
+  @lazySingleton
+  FirebaseFirestore firestore() => FirebaseFirestore.instance;
+
+  @lazySingleton
+  FirebaseStorage firebaseStorage() => FirebaseStorage.instance;
 
   @preResolve
   Future<HiveInterface> hive() async {

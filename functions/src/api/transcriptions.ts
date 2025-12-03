@@ -9,6 +9,10 @@ import {
   getTranscription,
   deleteTranscription,
 } from '../utils/firestore-helpers';
+import {
+  SonioxError,
+  transcribeWithSoniox,
+} from '../utils/soniox-helpers';
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -52,19 +56,20 @@ app.post('/', async (req: Request, res: Response) => {
           'audio/wav',
         );
 
-        // For now, return a placeholder transcription
-        // In production, you could integrate cloud Whisper API here
+        const sonioxResult = await transcribeWithSoniox(fileBuffer);
+
         const transcription = {
           id,
-          text: 'Cloud transcription placeholder - implement Whisper API integration',
+          text: sonioxResult.text,
           audioPath: signedUrl,
           storagePath: storedPath,
           durationMs: 0, // Calculate from audio file
           timestamp: new Date().toISOString(),
-          confidence: 0.8,
+          confidence: sonioxResult.confidence ?? 0.8,
           metadata: {
-            source: 'cloud_whisper',
+            source: 'soniox',
             fileName,
+            confidence: sonioxResult.confidence,
           },
         };
 
@@ -74,7 +79,9 @@ app.post('/', async (req: Request, res: Response) => {
         res.status(201).json(transcription);
       } catch (error) {
         console.error('Error processing transcription:', error);
-        res.status(500).json({
+        const status =
+          error instanceof SonioxError && error.status ? error.status : 500;
+        res.status(status).json({
           error: 'Failed to process transcription',
           message: error instanceof Error ? error.message : 'Unknown error',
         });

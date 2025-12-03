@@ -178,8 +178,8 @@ class HomeDashboardPage extends StatelessWidget {
           },
         ),
         _HomeFeatureCard(
-          title: 'Audio Note',
-          subtitle: 'Listen to notes',
+          title: 'Audio Notes',
+          subtitle: 'Listen on the go',
           icon: Icons.graphic_eq_outlined,
           onTap: () {
             Navigator.pushNamed(context, AppRoutes.tts);
