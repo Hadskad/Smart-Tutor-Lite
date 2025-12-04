@@ -47,6 +47,28 @@ app.*.map.json
 
 # Firebase Functions compiled output
 functions/lib/
+# Node modules
+functions/node_modules/
+
+
 
 # Temporary files
 allfiles.txt
+# Temporary files
+allfileshas.txt
+pglite-debug.log
+
+# Android local properties (already in android/.gitignore, but add to root for safety)
+android/local.properties
+
+# iOS build artifacts
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+# Generated files
+*.iml
+*.dart.js
+*.dart.js.map
+*.info.json
