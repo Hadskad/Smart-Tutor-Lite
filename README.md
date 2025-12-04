@@ -47,7 +47,7 @@ An offline-first, AI-powered study assistant for mobile devices. Transcribe lect
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Hadskad/Smart-Tutor-Lite.git
    cd smart_tutor_lite
    ```
 
@@ -72,13 +72,33 @@ An offline-first, AI-powered study assistant for mobile devices. Transcribe lect
 
 ### Whisper Native Setup
 
-On-device transcription depends on the upstream [whisper.cpp](https://github.com/ggerganov/whisper.cpp) sources and quantized `.ggml` models. Run the helper script whenever you set up a new machine or bump the Whisper version:
+On-device transcription depends on the upstream [whisper.cpp](https://github.com/ggerganov/whisper.cpp) sources and quantized `.ggml` models.
+
+**Important:** The Whisper model files are not included in this repository due to their large size (GitHub file size limits). You need to download them separately.
+
+#### Option 1: Use the Setup Script (Recommended)
+
+Run the helper script to automatically download whisper.cpp sources and models:
 
 ```bash
 bash scripts/setup_whisper.sh
 ```
 
-The script downloads the requested whisper.cpp release into both the Android (CMake) and iOS (Objective-C++) toolchains, and ensures the default models (`ggml-base.en.bin`, `ggml-tiny.en.bin`) live under `assets/models/`. Set `WHISPER_MODELS="ggml-small.en.bin ggml-base.en.bin"` to pull additional models when needed.
+The script downloads the requested whisper.cpp release into both the Android (CMake) and iOS (Objective-C++) toolchains, and ensures the default models (`ggml-base.en.bin`, `ggml-tiny.en.bin`) are placed under `assets/models/`. 
+
+To download additional models, set the environment variable:
+```bash
+WHISPER_MODELS="ggml-small.en.bin ggml-base.en.bin" bash scripts/setup_whisper.sh
+```
+
+#### Option 2: Manual Download
+
+1. Download whisper.cpp models from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) or the [official releases](https://github.com/ggerganov/whisper.cpp/releases)
+2. Place the model files in `assets/models/` directory:
+   - `ggml-base.en.bin` (recommended for good balance of speed and accuracy)
+   - `ggml-tiny.en.bin` (faster, lower accuracy, good for testing)
+
+**Note:** At minimum, you need at least one model file for transcription to work.
 
 ### Firebase Functions Setup
 
@@ -135,14 +155,15 @@ SmartTutor Lite is designed to work completely offline:
 
 ## ARM Architecture Optimization
 
-The app is optimized for ARM-based mobile devices:
+SmartTutor Lite is optimized for ARM-based mobile devices as part of the **ARM AI Challenge**:
 
 - Native C++/JNI (Android) and Objective-C++ (iOS) for Whisper integration
 - Quantized Whisper models for efficient inference
 - ARM NEON optimizations for SIMD operations
 - Performance monitoring for CPU, memory, and battery usage
+- On-device AI processing with minimal battery impact
 
-See [docs/ARM_AI_OPTIMIZATION.md](docs/ARM_AI_OPTIMIZATION.md) for details.
+See [HACKATHON_COMPLIANCE.md](HACKATHON_COMPLIANCE.md) for detailed compliance information and [docs/ARM_AI_OPTIMIZATION.md](docs/ARM_AI_OPTIMIZATION.md) for technical details.
 
 ## Testing
 
@@ -158,6 +179,7 @@ flutter test integration_test/
 
 ## Documentation
 
+- [Hackathon Compliance](HACKATHON_COMPLIANCE.md) - ARM AI Challenge compliance details
 - [API Documentation](docs/API_DOCUMENTATION.md) - Firebase Functions API reference
 - [Firebase Setup](docs/FIREBASE_SETUP.md) - Firebase Functions deployment guide
 - [ARM Optimization](docs/ARM_AI_OPTIMIZATION.md) - ARM architecture optimization details
@@ -171,12 +193,14 @@ flutter test integration_test/
 4. Add tests
 5. Submit a pull request
 
+## Acknowledgments
+
+- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) for on-device transcription
+- OpenAI for cloud AI services (summarization, quiz generation, flashcards)
+- ElevenLabs for high-quality text-to-speech
+- Firebase for backend infrastructure
+- Built for the ARM AI Challenge
+
 ## License
 
 See [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Whisper.cpp for on-device transcription
-- OpenAI for cloud AI services
-- Firebase for backend infrastructure
