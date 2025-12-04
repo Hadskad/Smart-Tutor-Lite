@@ -55,12 +55,25 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     );
 
     result.fold(
-      (failure) => emit(
-        TtsError(
-          message: failure.message ?? 'Failed to convert PDF to audio',
-          jobs: List.unmodifiable(_jobs),
-        ),
-      ),
+      (failure) {
+        final message = failure.message ?? 'Failed to convert PDF to audio';
+        // Check if request was queued
+        if (message.contains('queued') || message.contains('Queued')) {
+          emit(
+            TtsQueued(
+              message: message,
+              jobs: List.unmodifiable(_jobs),
+            ),
+          );
+        } else {
+          emit(
+            TtsError(
+              message: message,
+              jobs: List.unmodifiable(_jobs),
+            ),
+          );
+        }
+      },
       (job) {
         _jobs.insert(0, job);
         emit(
@@ -85,12 +98,25 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     );
 
     result.fold(
-      (failure) => emit(
-        TtsError(
-          message: failure.message ?? 'Failed to convert text to audio',
-          jobs: List.unmodifiable(_jobs),
-        ),
-      ),
+      (failure) {
+        final message = failure.message ?? 'Failed to convert text to audio';
+        // Check if request was queued
+        if (message.contains('queued') || message.contains('Queued')) {
+          emit(
+            TtsQueued(
+              message: message,
+              jobs: List.unmodifiable(_jobs),
+            ),
+          );
+        } else {
+          emit(
+            TtsError(
+              message: message,
+              jobs: List.unmodifiable(_jobs),
+            ),
+          );
+        }
+      },
       (job) {
         _jobs.insert(0, job);
         emit(

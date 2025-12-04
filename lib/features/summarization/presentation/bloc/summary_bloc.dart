@@ -47,12 +47,25 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
       );
 
       result.fold(
-      (failure) => emit(
-        SummaryError(
-          message: failure.message ?? 'Failed to summarize text',
-          summaries: List.unmodifiable(_summaries),
-        ),
-      ),
+      (failure) {
+        final message = failure.message ?? 'Failed to summarize text';
+        // Check if request was queued
+        if (message.contains('queued') || message.contains('Queued')) {
+          emit(
+            SummaryQueued(
+              message: message,
+              summaries: List.unmodifiable(_summaries),
+            ),
+          );
+        } else {
+          emit(
+            SummaryError(
+              message: message,
+              summaries: List.unmodifiable(_summaries),
+            ),
+          );
+        }
+      },
       (summary) {
         _summaries.insert(0, summary);
         emit(
@@ -83,12 +96,25 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
       );
 
       result.fold(
-      (failure) => emit(
-        SummaryError(
-          message: failure.message ?? 'Failed to summarize PDF',
-          summaries: List.unmodifiable(_summaries),
-        ),
-      ),
+      (failure) {
+        final message = failure.message ?? 'Failed to summarize PDF';
+        // Check if request was queued
+        if (message.contains('queued') || message.contains('Queued')) {
+          emit(
+            SummaryQueued(
+              message: message,
+              summaries: List.unmodifiable(_summaries),
+            ),
+          );
+        } else {
+          emit(
+            SummaryError(
+              message: message,
+              summaries: List.unmodifiable(_summaries),
+            ),
+          );
+        }
+      },
       (summary) {
         _summaries.insert(0, summary);
         emit(

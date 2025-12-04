@@ -30,5 +30,8 @@ abstract class QuizRepository {
 
   /// Delete quiz
   Future<Either<Failure, Unit>> deleteQuiz(String id);
+
+  /// Process all pending queued quizzes (internal use by sync service)
+  Future<void> processQueuedQuizzes();
 }
 

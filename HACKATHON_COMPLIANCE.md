@@ -34,17 +34,13 @@ SmartTutor Lite is optimized for ARM-based mobile devices (Android ARM64 and iOS
    - iOS: Objective-C++ with ARM64 architecture
    - Optimized compiler flags (`-O3`, `-march=armv8-a`)
 
-2. **Model Quantization**
-   - Using quantized Whisper models (INT8 quantization)
-   - Reduced model size without significant accuracy loss
-   - Faster inference on ARM processors
 
-3. **Memory Management**
+2. **Memory Management**
    - Efficient memory allocation for audio buffers
    - Model caching to reduce load times
    - Proper cleanup of native resources
 
-4. **Performance Monitoring**
+3. **Performance Monitoring**
    - Native performance bridges for CPU, memory, battery tracking
    - Real-time metrics collection during AI operations
    - Benchmarking tools for ARM optimization validation

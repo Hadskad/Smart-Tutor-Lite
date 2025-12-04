@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'app/app.dart';
 import 'core/constants/app_constants.dart';
+import 'core/sync/queue_sync_service.dart';
 import 'firebase_options.dart';
 import 'injection_container.dart';
 import 'native_bridge/whisper_lifecycle_observer.dart';
@@ -16,5 +17,9 @@ Future<void> main() async {
     [AppConstants.whisperDefaultModel],
   );
   getIt<WhisperLifecycleObserver>().start();
+  
+  // Start queue sync service to process offline queues when online
+  getIt<QueueSyncService>().start();
+  
   runApp(const SmartTutorLiteApp());
 }

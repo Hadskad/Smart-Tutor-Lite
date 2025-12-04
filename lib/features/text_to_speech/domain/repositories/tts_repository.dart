@@ -24,5 +24,8 @@ abstract class TtsRepository {
 
   /// Delete TTS job
   Future<Either<Failure, Unit>> deleteTtsJob(String id);
+
+  /// Process all pending queued TTS jobs (internal use by sync service)
+  Future<void> processQueuedTtsJobs();
 }
 

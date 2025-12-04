@@ -21,8 +21,11 @@ import 'package:logger/logger.dart' as _i974;
 import 'package:shared_preferences/shared_preferences.dart' as _i460;
 import 'package:smart_tutor_lite/core/network/api_client.dart' as _i114;
 import 'package:smart_tutor_lite/core/network/network_info.dart' as _i440;
+import 'package:smart_tutor_lite/core/sync/queue_sync_service.dart' as _i545;
 import 'package:smart_tutor_lite/core/utils/logger.dart' as _i496;
 import 'package:smart_tutor_lite/core/utils/performance_monitor.dart' as _i366;
+import 'package:smart_tutor_lite/features/quiz/data/datasources/quiz_queue_local_datasource.dart'
+    as _i96;
 import 'package:smart_tutor_lite/features/quiz/data/datasources/quiz_remote_datasource.dart'
     as _i877;
 import 'package:smart_tutor_lite/features/quiz/data/repositories/quiz_repository_impl.dart'
@@ -53,6 +56,8 @@ import 'package:smart_tutor_lite/features/study_mode/domain/usecases/update_prog
     as _i136;
 import 'package:smart_tutor_lite/features/study_mode/presentation/bloc/study_mode_bloc.dart'
     as _i111;
+import 'package:smart_tutor_lite/features/summarization/data/datasources/summary_queue_local_datasource.dart'
+    as _i38;
 import 'package:smart_tutor_lite/features/summarization/data/datasources/summary_remote_datasource.dart'
     as _i82;
 import 'package:smart_tutor_lite/features/summarization/data/repositories/summary_repository_impl.dart'
@@ -65,6 +70,8 @@ import 'package:smart_tutor_lite/features/summarization/domain/usecases/summariz
     as _i613;
 import 'package:smart_tutor_lite/features/summarization/presentation/bloc/summary_bloc.dart'
     as _i569;
+import 'package:smart_tutor_lite/features/text_to_speech/data/datasources/tts_queue_local_datasource.dart'
+    as _i792;
 import 'package:smart_tutor_lite/features/text_to_speech/data/datasources/tts_remote_datasource.dart'
     as _i539;
 import 'package:smart_tutor_lite/features/text_to_speech/data/repositories/tts_repository_impl.dart'
@@ -157,6 +164,10 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i687.WhisperFfi(gh<_i477.WhisperModelManager>()));
     gh.lazySingleton<_i366.PerformanceMonitor>(
         () => _i366.PerformanceMonitor(gh<_i117.Battery>()));
+    gh.lazySingleton<_i96.QuizQueueLocalDataSource>(
+        () => _i96.QuizQueueLocalDataSourceImpl(gh<_i979.HiveInterface>()));
+    gh.lazySingleton<_i792.TtsQueueLocalDataSource>(
+        () => _i792.TtsQueueLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i1047.TranscriptionJobRemoteDataSource>(
         () => _i1047.TranscriptionJobRemoteDataSourceImpl(
               gh<_i974.FirebaseFirestore>(),
@@ -167,6 +178,8 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i588.TranscriptionPreferencesRepository>(() =>
         _i671.TranscriptionPreferencesRepositoryImpl(
             gh<_i287.TranscriptionPreferencesLocalDataSource>()));
+    gh.lazySingleton<_i38.SummaryQueueLocalDataSource>(
+        () => _i38.SummaryQueueLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i756.WhisperLifecycleObserver>(
         () => _i756.WhisperLifecycleObserver(gh<_i687.WhisperFfi>()));
     gh.lazySingleton<_i440.NetworkInfo>(
@@ -182,13 +195,13 @@ extension GetItInjectableX on _i174.GetIt {
         _i794.CancelTranscriptionJob(gh<_i80.TranscriptionJobRepository>()));
     gh.lazySingleton<_i925.CreateTranscriptionJob>(() =>
         _i925.CreateTranscriptionJob(gh<_i80.TranscriptionJobRepository>()));
-    gh.lazySingleton<_i1047.WatchTranscriptionJob>(() =>
-        _i1047.WatchTranscriptionJob(gh<_i80.TranscriptionJobRepository>()));
+    gh.lazySingleton<_i14.RequestNoteRetry>(
+        () => _i14.RequestNoteRetry(gh<_i80.TranscriptionJobRepository>()));
     gh.lazySingleton<_i30.RequestTranscriptionJobRetry>(() =>
         _i30.RequestTranscriptionJobRetry(
             gh<_i80.TranscriptionJobRepository>()));
-    gh.lazySingleton<_i14.RequestNoteRetry>(
-        () => _i14.RequestNoteRetry(gh<_i80.TranscriptionJobRepository>()));
+    gh.lazySingleton<_i1047.WatchTranscriptionJob>(() =>
+        _i1047.WatchTranscriptionJob(gh<_i80.TranscriptionJobRepository>()));
     gh.lazySingleton<_i361.Dio>(
         () => externalModule.dio(gh<_i496.AppLogger>()));
     gh.lazySingleton<_i114.ApiClient>(() => _i114.ApiClient(
@@ -214,17 +227,32 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i794.FlashcardRemoteDataSourceImpl(gh<_i114.ApiClient>()));
     gh.lazySingleton<_i978.TranscribeAudio>(
         () => _i978.TranscribeAudio(gh<_i861.TranscriptionRepository>()));
-    gh.lazySingleton<_i90.TtsRepository>(() => _i444.TtsRepositoryImpl(
-          remoteDataSource: gh<_i539.TtsRemoteDataSource>(),
-          networkInfo: gh<_i440.NetworkInfo>(),
-          hive: gh<_i979.HiveInterface>(),
-        ));
     gh.lazySingleton<_i1069.SummaryRepository>(
         () => _i419.SummaryRepositoryImpl(
               remoteDataSource: gh<_i82.SummaryRemoteDataSource>(),
+              queueDataSource: gh<_i38.SummaryQueueLocalDataSource>(),
               networkInfo: gh<_i440.NetworkInfo>(),
               hive: gh<_i979.HiveInterface>(),
             ));
+    gh.lazySingleton<_i291.QuizRepository>(() => _i237.QuizRepositoryImpl(
+          remoteDataSource: gh<_i877.QuizRemoteDataSource>(),
+          queueDataSource: gh<_i96.QuizQueueLocalDataSource>(),
+          networkInfo: gh<_i440.NetworkInfo>(),
+          hive: gh<_i979.HiveInterface>(),
+        ));
+    gh.lazySingleton<_i90.TtsRepository>(() => _i444.TtsRepositoryImpl(
+          remoteDataSource: gh<_i539.TtsRemoteDataSource>(),
+          queueDataSource: gh<_i792.TtsQueueLocalDataSource>(),
+          networkInfo: gh<_i440.NetworkInfo>(),
+          hive: gh<_i979.HiveInterface>(),
+        ));
+    gh.lazySingleton<_i545.QueueSyncService>(() => _i545.QueueSyncService(
+          gh<_i440.NetworkInfo>(),
+          gh<_i1069.SummaryRepository>(),
+          gh<_i291.QuizRepository>(),
+          gh<_i90.TtsRepository>(),
+          gh<_i496.AppLogger>(),
+        ));
     gh.factory<_i940.TranscriptionBloc>(() => _i940.TranscriptionBloc(
           gh<_i978.TranscribeAudio>(),
           gh<_i99.PerformanceBridge>(),
@@ -247,11 +275,6 @@ extension GetItInjectableX on _i174.GetIt {
               localDataSource: gh<_i777.FlashcardLocalDataSource>(),
               networkInfo: gh<_i440.NetworkInfo>(),
             ));
-    gh.lazySingleton<_i291.QuizRepository>(() => _i237.QuizRepositoryImpl(
-          remoteDataSource: gh<_i877.QuizRemoteDataSource>(),
-          networkInfo: gh<_i440.NetworkInfo>(),
-          hive: gh<_i979.HiveInterface>(),
-        ));
     gh.lazySingleton<_i889.GenerateQuiz>(
         () => _i889.GenerateQuiz(gh<_i291.QuizRepository>()));
     gh.lazySingleton<_i464.SubmitQuiz>(

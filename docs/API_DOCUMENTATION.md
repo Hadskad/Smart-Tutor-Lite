@@ -7,7 +7,7 @@ SmartTutor Lite uses Firebase Functions as its backend API. All endpoints are HT
 ## Base URL
 
 ```
-https://us-central1-smart-tutor-lite-a66b5.cloudfunctions.net
+https://europe-west2-smart-tutor-lite-a66b5.cloudfunctions.net
 ```
 
 ## Authentication

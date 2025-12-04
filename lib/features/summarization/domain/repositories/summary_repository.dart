@@ -24,4 +24,7 @@ abstract class SummaryRepository {
 
   /// Delete summary
   Future<Either<Failure, Unit>> deleteSummary(String id);
+
+  /// Process all pending queued summaries (internal use by sync service)
+  Future<void> processQueuedSummaries();
 }

@@ -45,3 +45,15 @@ class SummaryError extends SummaryState {
   List<Object?> get props => [...super.props, message];
 }
 
+class SummaryQueued extends SummaryState {
+  const SummaryQueued({
+    required this.message,
+    super.summaries = const [],
+  });
+
+  final String message;
+
+  @override
+  List<Object?> get props => [...super.props, message];
+}
+

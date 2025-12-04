@@ -1,13 +1,16 @@
 import 'package:dartz/dartz.dart';
 import 'package:hive/hive.dart';
 import 'package:injectable/injectable.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/errors/failures.dart';
 import '../../../../core/network/network_info.dart';
 import '../../domain/entities/tts_job.dart';
 import '../../domain/repositories/tts_repository.dart';
+import '../datasources/tts_queue_local_datasource.dart';
 import '../datasources/tts_remote_datasource.dart';
 import '../models/tts_job_model.dart';
+import '../models/tts_queue_model.dart';
 
 const _ttsJobCacheBox = 'tts_job_cache';
 const _defaultElevenLabsVoiceId = '21m00Tcm4TlvDq8ikWAM';
@@ -16,15 +19,19 @@ const _defaultElevenLabsVoiceId = '21m00Tcm4TlvDq8ikWAM';
 class TtsRepositoryImpl implements TtsRepository {
   TtsRepositoryImpl({
     required TtsRemoteDataSource remoteDataSource,
+    required TtsQueueLocalDataSource queueDataSource,
     required NetworkInfo networkInfo,
     required HiveInterface hive,
   })  : _remoteDataSource = remoteDataSource,
+        _queueDataSource = queueDataSource,
         _networkInfo = networkInfo,
         _hive = hive;
 
   final TtsRemoteDataSource _remoteDataSource;
+  final TtsQueueLocalDataSource _queueDataSource;
   final NetworkInfo _networkInfo;
   final HiveInterface _hive;
+  final Uuid _uuid = const Uuid();
 
   Future<Box<Map>> _openCacheBox() async {
     if (_hive.isBoxOpen(_ttsJobCacheBox)) {
@@ -69,8 +76,21 @@ class TtsRepositoryImpl implements TtsRepository {
       // Check if online before attempting remote call
       final connected = await _networkInfo.isConnected;
       if (!connected) {
-        return const Left(
-          NetworkFailure(message: 'No internet connection'),
+        // Queue the request for later processing
+        final queueItem = TtsQueueModel(
+          id: _uuid.v4(),
+          sourceType: 'pdf',
+          pdfUrl: pdfUrl,
+          voice: voice,
+          createdAt: DateTime.now(),
+        );
+        await _queueDataSource.addToQueue(queueItem);
+        
+        // Return a special failure that indicates the request was queued
+        return Left(
+          NetworkFailure(
+            message: 'Request queued. Will be processed when online.',
+          ),
         );
       }
 
@@ -105,8 +125,21 @@ class TtsRepositoryImpl implements TtsRepository {
       // Check if online before attempting remote call
       final connected = await _networkInfo.isConnected;
       if (!connected) {
-        return const Left(
-          NetworkFailure(message: 'No internet connection'),
+        // Queue the request for later processing
+        final queueItem = TtsQueueModel(
+          id: _uuid.v4(),
+          sourceType: 'text',
+          text: text,
+          voice: voice,
+          createdAt: DateTime.now(),
+        );
+        await _queueDataSource.addToQueue(queueItem);
+        
+        // Return a special failure that indicates the request was queued
+        return Left(
+          NetworkFailure(
+            message: 'Request queued. Will be processed when online.',
+          ),
         );
       }
 
@@ -192,6 +225,69 @@ class TtsRepositoryImpl implements TtsRepository {
           cause: error,
         ),
       );
+    }
+  }
+
+  /// Process all pending queued TTS jobs
+  Future<void> processQueuedTtsJobs() async {
+    try {
+      final connected = await _networkInfo.isConnected;
+      if (!connected) {
+        return; // Not online, skip processing
+      }
+
+      final pendingItems = await _queueDataSource.getPendingItems();
+      const maxRetries = 3;
+
+      for (final item in pendingItems) {
+        // Skip items that have exceeded max retries
+        if (item.retryCount >= maxRetries) {
+          await _queueDataSource.markAsFailed(
+            item.id,
+            'Maximum retry count exceeded',
+          );
+          continue;
+        }
+
+        try {
+          // Mark as processing
+          await _queueDataSource.markAsProcessing(item.id);
+
+          TtsJobModel result;
+          if (item.sourceType == 'text' && item.text != null) {
+            result = await _remoteDataSource.convertTextToAudio(
+              text: item.text!,
+              voice: item.voice,
+            );
+          } else if (item.sourceType == 'pdf' && item.pdfUrl != null) {
+            result = await _remoteDataSource.convertPdfToAudio(
+              pdfUrl: item.pdfUrl!,
+              voice: item.voice,
+            );
+          } else {
+            await _queueDataSource.markAsFailed(
+              item.id,
+              'Invalid queue item: missing required data',
+            );
+            continue;
+          }
+
+          // Cache the result
+          await _cacheTtsJob(result);
+
+          // Mark as completed (removes from queue)
+          await _queueDataSource.markAsCompleted(item.id);
+        } catch (error) {
+          // Mark as failed, will retry later
+          await _queueDataSource.markAsFailed(
+            item.id,
+            error.toString(),
+          );
+        }
+      }
+    } catch (error) {
+      // Log error but don't throw - queue processing should be resilient
+      // In production, you might want to log this to a monitoring service
     }
   }
 }

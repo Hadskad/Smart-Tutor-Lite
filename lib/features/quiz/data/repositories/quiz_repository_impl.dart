@@ -1,14 +1,17 @@
 import 'package:dartz/dartz.dart';
 import 'package:hive/hive.dart';
 import 'package:injectable/injectable.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/errors/failures.dart';
 import '../../../../core/network/network_info.dart';
 import '../../domain/entities/quiz.dart';
 import '../../domain/entities/quiz_result.dart';
 import '../../domain/repositories/quiz_repository.dart';
+import '../datasources/quiz_queue_local_datasource.dart';
 import '../datasources/quiz_remote_datasource.dart';
 import '../models/quiz_model.dart';
+import '../models/quiz_queue_model.dart';
 import '../models/quiz_result_model.dart';
 
 const _quizCacheBoxName = 'quiz_cache';
@@ -18,15 +21,19 @@ const _quizResultCacheBoxName = 'quiz_result_cache';
 class QuizRepositoryImpl implements QuizRepository {
   QuizRepositoryImpl({
     required QuizRemoteDataSource remoteDataSource,
+    required QuizQueueLocalDataSource queueDataSource,
     required NetworkInfo networkInfo,
     required HiveInterface hive,
   })  : _remoteDataSource = remoteDataSource,
+        _queueDataSource = queueDataSource,
         _networkInfo = networkInfo,
         _hive = hive;
 
   final QuizRemoteDataSource _remoteDataSource;
+  final QuizQueueLocalDataSource _queueDataSource;
   final NetworkInfo _networkInfo;
   final HiveInterface _hive;
+  final Uuid _uuid = const Uuid();
   Box<Map>? _quizCacheBox;
   Box<Map>? _quizResultCacheBox;
 
@@ -98,8 +105,22 @@ class QuizRepositoryImpl implements QuizRepository {
       // Check if online before attempting remote call
       final connected = await _networkInfo.isConnected;
       if (!connected) {
-        return const Left(
-          NetworkFailure(message: 'No internet connection'),
+        // Queue the request for later processing
+        final queueItem = QuizQueueModel(
+          id: _uuid.v4(),
+          sourceId: sourceId,
+          sourceType: sourceType,
+          numQuestions: numQuestions,
+          difficulty: difficulty,
+          createdAt: DateTime.now(),
+        );
+        await _queueDataSource.addToQueue(queueItem);
+        
+        // Return a special failure that indicates the request was queued
+        return Left(
+          NetworkFailure(
+            message: 'Request queued. Will be processed when online.',
+          ),
         );
       }
 
@@ -257,6 +278,58 @@ class QuizRepositoryImpl implements QuizRepository {
           cause: error,
         ),
       );
+    }
+  }
+
+  /// Process all pending queued quizzes
+  Future<void> processQueuedQuizzes() async {
+    try {
+      final connected = await _networkInfo.isConnected;
+      if (!connected) {
+        return; // Not online, skip processing
+      }
+
+      final pendingItems = await _queueDataSource.getPendingItems();
+      const maxRetries = 3;
+
+      for (final item in pendingItems) {
+        // Skip items that have exceeded max retries
+        if (item.retryCount >= maxRetries) {
+          await _queueDataSource.markAsFailed(
+            item.id,
+            'Maximum retry count exceeded',
+          );
+          continue;
+        }
+
+        try {
+          // Mark as processing
+          await _queueDataSource.markAsProcessing(item.id);
+
+          // Call remote API
+          final result = await _remoteDataSource.generateQuiz(
+            sourceId: item.sourceId,
+            sourceType: item.sourceType,
+            numQuestions: item.numQuestions,
+            difficulty: item.difficulty,
+          );
+
+          // Cache the result
+          await _cacheQuiz(result);
+
+          // Mark as completed (removes from queue)
+          await _queueDataSource.markAsCompleted(item.id);
+        } catch (error) {
+          // Mark as failed, will retry later
+          await _queueDataSource.markAsFailed(
+            item.id,
+            error.toString(),
+          );
+        }
+      }
+    } catch (error) {
+      // Log error but don't throw - queue processing should be resilient
+      // In production, you might want to log this to a monitoring service
     }
   }
 }

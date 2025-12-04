@@ -83,3 +83,15 @@ class QuizError extends QuizState {
   List<Object?> get props => [...super.props, message];
 }
 
+class QuizQueued extends QuizState {
+  const QuizQueued({
+    required this.message,
+    super.quizzes = const [],
+  });
+
+  final String message;
+
+  @override
+  List<Object?> get props => [...super.props, message];
+}
+

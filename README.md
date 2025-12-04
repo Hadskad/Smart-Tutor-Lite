@@ -4,12 +4,12 @@ An offline-first, AI-powered study assistant for mobile devices. Transcribe lect
 
 ## Features
 
-- 🎤 **On-Device Transcription**: Record and transcribe lectures using Whisper.cpp (runs entirely offline)
-- 📝 **Smart Summarization**: Generate concise summaries from text or PDF documents
-- 📚 **Quiz Generation**: Create quizzes from transcriptions or summaries
-- 🔊 **Text-to-Speech**: Convert PDFs to audio for listening on-the-go
-- 🎯 **Study Mode**: Generate flashcards and track your study progress
-- 🔄 **Offline-First**: Works completely offline, syncs to cloud when online
+- **On-Device Transcription**: Record and transcribe lectures using Whisper.cpp (runs entirely offline), or optionally with the online mode, for better structured notes.
+-  **Smart Summarization**: Generate concise summaries from generated notes or PDF documents
+-  **Quiz Generation**: Create quizzes from transcriptions or summaries
+-  **Text-to-Speech**: Convert PDFs to audio for listening on-the-go
+-  **Study Mode**: Generate flashcards and track your study progress
+-  **Offline-First**
 
 ## Architecture
 
@@ -25,6 +25,7 @@ An offline-first, AI-powered study assistant for mobile devices. Transcribe lect
 - **Database**: Firestore for cloud data storage
 - **Storage**: Firebase Storage for file uploads
 - **AI Services**: 
+  - Soniox for Transcription
   - OpenAI GPT for summarization, quiz generation, flashcards
   - ElevenLabs Text-to-Speech for high-quality, natural-sounding audio conversion
 
@@ -37,11 +38,46 @@ An offline-first, AI-powered study assistant for mobile devices. Transcribe lect
 
 ### Prerequisites
 
-- Flutter SDK (>=3.2.0)
-- Dart SDK (>=3.2.0)
-- Node.js (>=18.0.0) for Firebase Functions
-- Firebase CLI
-- Android Studio / Xcode for native development
+Before you begin, ensure you have the following installed:
+
+- **Flutter SDK** (>=3.2.0) - [Install Flutter](https://flutter.dev/docs/get-started/install)
+- **Dart SDK** (>=3.2.0) - Included with Flutter
+- **Node.js** (>=20.0.0) - Required for Firebase Functions - [Download Node.js](https://nodejs.org/)
+- **Firebase CLI** - Install via `npm install -g firebase-tools`
+- **Android Studio** (for Android development)
+  - Android SDK
+  - Android NDK (required for native Whisper integration)
+  - CMake (>=3.22.1, required for native builds)
+- **Xcode** (>=14.0, for iOS development on macOS only)
+  - CocoaPods - Install via `sudo gem install cocoapods`
+- **Git** - For cloning the repository
+
+#### Verify Prerequisites
+
+After installing the prerequisites, verify your setup:
+
+```bash
+# Check Flutter installation and environment
+flutter doctor -v
+
+# Verify Node.js version
+node --version  # Should be >=20.0.0
+
+# Verify Firebase CLI
+firebase --version
+
+# Verify CocoaPods (macOS/iOS only)
+pod --version
+```
+
+**Important**: Resolve any issues reported by `flutter doctor` before proceeding. Common fixes:
+- Accept Android licenses: `flutter doctor --android-licenses`
+- Install missing Xcode components (macOS only)
+- Install missing Android SDK components via Android Studio
+
+### Quick Start Guide
+
+For a comprehensive build guide with detailed ARM device instructions, see [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md).
 
 ### Flutter App Setup
 
@@ -51,54 +87,138 @@ An offline-first, AI-powered study assistant for mobile devices. Transcribe lect
    cd smart_tutor_lite
    ```
 
-2. **Install Flutter dependencies**
+2. **Download Missing Files**
+   
+   ⚠️ **Important**: Several required files are excluded from the repository (see `.gitignore`). You must download them separately before building.
+   
+   **See [SETUP.md](SETUP.md) for complete instructions on obtaining:**
+   - Whisper model files (required for transcription)
+   - Firebase configuration files
+   - Generated code files
+   - Environment variables
+   
+   Quick reference:
+   ```bash
+   # Download Whisper models and native sources
+   bash scripts/setup_whisper.sh
+   
+   # Generate Firebase configuration files
+   dart pub global activate flutterfire_cli
+   flutterfire configure
+   ```
+
+3. **Install Flutter dependencies**
    ```bash
    flutter pub get
    ```
 
-3. **Generate code**
+4. **Generate code**
    ```bash
    flutter pub run build_runner build --delete-conflicting-outputs
    ```
 
-4. **Configure Firebase**
-   - Firebase is already configured with `firebase_options.dart`
+5. **Configure Firebase**
+   
+   If you haven't already, set up Firebase:
+   - Install FlutterFire CLI: `dart pub global activate flutterfire_cli`
+   - Configure Firebase: `flutterfire configure`
+   - This generates `firebase_options.dart` and downloads config files
    - Ensure `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) are in place
+   
+   For detailed Firebase setup, see [SETUP.md](SETUP.md) and [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md)
 
-5. **Run the app**
+6. **Setup iOS Dependencies (iOS/macOS only)**
+   
+   Install CocoaPods dependencies:
+   ```bash
+   cd ios
+   pod install
+   cd ..
+   ```
+   
+   **Note**: CocoaPods must be installed first. If you get errors:
+   ```bash
+   # Install CocoaPods (macOS only)
+   sudo gem install cocoapods
+   ```
+
+7. **Setup Android Native Build Tools**
+   
+   Ensure Android NDK and CMake are installed:
+   - Open Android Studio
+   - Go to **Tools → SDK Manager → SDK Tools**
+   - Check and install:
+     - **NDK (Side by side)** - Required for native Whisper C++ builds
+     - **CMake** - Required for building native libraries (version 3.22.1+)
+   - Click **Apply** to install
+   
+   Verify installation:
+   ```bash
+   # Check if NDK is installed (path may vary)
+   ls $ANDROID_HOME/ndk/  # or $ANDROID_SDK_ROOT/ndk/
+   
+   # Check CMake version
+   cmake --version  # Should be >=3.22.1
+   ```
+
+8. **Run the app**
    ```bash
    flutter run
    ```
 
-### Whisper Native Setup
+### Building for Production
 
-On-device transcription depends on the upstream [whisper.cpp](https://github.com/ggerganov/whisper.cpp) sources and quantized `.ggml` models.
-
-**Important:** The Whisper model files are not included in this repository due to their large size (GitHub file size limits). You need to download them separately.
-
-#### Option 1: Use the Setup Script (Recommended)
-
-Run the helper script to automatically download whisper.cpp sources and models:
+#### Build Android APK (ARM64)
 
 ```bash
-bash scripts/setup_whisper.sh
+# Build release APK for ARM64 devices
+flutter build apk --release --target-platform android-arm64
+
+# Or build for all ARM architectures (recommended)
+flutter build apk --release
+
+# Build App Bundle for Play Store
+flutter build appbundle --release
 ```
 
-The script downloads the requested whisper.cpp release into both the Android (CMake) and iOS (Objective-C++) toolchains, and ensures the default models (`ggml-base.en.bin`, `ggml-tiny.en.bin`) are placed under `assets/models/`. 
+Output location: `build/app/outputs/flutter-apk/app-release.apk`
 
-To download additional models, set the environment variable:
+#### Build iOS (ARM64 - Physical Devices Only)
+
 ```bash
-WHISPER_MODELS="ggml-small.en.bin ggml-base.en.bin" bash scripts/setup_whisper.sh
+# Build for iOS device (ARM64)
+flutter build ios --release
+
+# Or use Xcode for more control
+open ios/Runner.xcworkspace
 ```
 
-#### Option 2: Manual Download
+**Note**: 
+- iOS builds target ARM64 by default on physical devices
+- Requires macOS with Xcode installed
+- Requires valid signing certificates for device deployment
 
-1. Download whisper.cpp models from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) or the [official releases](https://github.com/ggerganov/whisper.cpp/releases)
-2. Place the model files in `assets/models/` directory:
-   - `ggml-base.en.bin` (recommended for good balance of speed and accuracy)
-   - `ggml-tiny.en.bin` (faster, lower accuracy, good for testing)
+#### Build Commands Reference
 
-**Note:** At minimum, you need at least one model file for transcription to work.
+```bash
+# Development builds
+flutter run                    # Run in debug mode
+flutter run --release          # Run in release mode
+
+# Android builds
+flutter build apk              # APK for all architectures
+flutter build apk --split-per-abi  # Separate APKs per architecture
+flutter build appbundle        # App Bundle for Play Store
+
+# iOS builds (macOS only)
+flutter build ios              # iOS release build
+flutter build ios --debug      # iOS debug build
+
+# Verify ARM architecture
+flutter build apk --release --target-platform android-arm64
+```
+
+For detailed build instructions including ARM-specific optimizations, troubleshooting, and deployment guides, see [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md).
 
 ### Firebase Functions Setup
 
@@ -109,6 +229,13 @@ Quick setup:
 cd functions
 npm install
 firebase deploy --only functions
+```
+
+**Important**: Don't forget to set API keys:
+```bash
+firebase functions:config:set openai.api_key="YOUR_OPENAI_API_KEY"
+firebase functions:config:set elevenlabs.api_key="YOUR_ELEVENLABS_API_KEY"
+firebase functions:config:set soniox.api_key="YOUR_SONIOX_API_KEY"
 ```
 
 ## Project Structure
@@ -146,12 +273,17 @@ smart_tutor_lite/
 
 ## Offline-First Architecture
 
-SmartTutor Lite is designed to work completely offline:
+SmartTutor Lite is designed to work offline:
 
 1. **Local Storage**: All data is stored locally using Hive and SQFlite
 2. **On-Device AI**: Transcription uses on-device Whisper (no internet required)
 3. **Background Sync**: When online, data syncs to Firestore automatically
-4. **Queue System**: AI tasks (summarization, quizzes) are queued when offline and processed when online
+4. **Queue System**: AI tasks (summarization, quiz generation, text-to-speech) are automatically queued when offline and processed when connectivity is restored
+   - Requests are stored locally in Hive when offline
+   - Queue sync service monitors network connectivity
+   - When online, queued tasks are processed automatically in the background
+   - Failed tasks are retried up to 3 times before being marked as failed
+   - Users receive feedback when requests are queued vs. processed immediately
 
 ## ARM Architecture Optimization
 
@@ -179,11 +311,12 @@ flutter test integration_test/
 
 ## Documentation
 
+- **[BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md)** - Comprehensive step-by-step build guide for ARM devices
+- **[SETUP.md](SETUP.md)** - Guide to obtain missing files not in repository
 - [Hackathon Compliance](HACKATHON_COMPLIANCE.md) - ARM AI Challenge compliance details
-- [API Documentation](docs/API_DOCUMENTATION.md) - Firebase Functions API reference
 - [Firebase Setup](docs/FIREBASE_SETUP.md) - Firebase Functions deployment guide
-- [ARM Optimization](docs/ARM_AI_OPTIMIZATION.md) - ARM architecture optimization details
-- [Performance Benchmarks](docs/PERFORMANCE_BENCHMARKS.md) - Performance metrics and benchmarks
+
+
 
 ## Contributing
 

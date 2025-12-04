@@ -59,3 +59,15 @@ class TtsError extends TtsState {
   List<Object?> get props => [...super.props, message];
 }
 
+class TtsQueued extends TtsState {
+  const TtsQueued({
+    required this.message,
+    super.jobs = const [],
+  });
+
+  final String message;
+
+  @override
+  List<Object?> get props => [...super.props, message];
+}
+

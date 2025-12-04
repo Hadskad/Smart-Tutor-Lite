@@ -52,12 +52,25 @@ class QuizBloc extends Bloc<QuizEvent, QuizState> {
       );
 
       result.fold(
-      (failure) => emit(
-        QuizError(
-          message: failure.message ?? 'Failed to generate quiz',
-          quizzes: List.unmodifiable(_quizzes),
-        ),
-      ),
+      (failure) {
+        final message = failure.message ?? 'Failed to generate quiz';
+        // Check if request was queued
+        if (message.contains('queued') || message.contains('Queued')) {
+          emit(
+            QuizQueued(
+              message: message,
+              quizzes: List.unmodifiable(_quizzes),
+            ),
+          );
+        } else {
+          emit(
+            QuizError(
+              message: message,
+              quizzes: List.unmodifiable(_quizzes),
+            ),
+          );
+        }
+      },
       (quiz) {
         _quizzes.insert(0, quiz);
         _currentAnswers = <String, int>{};

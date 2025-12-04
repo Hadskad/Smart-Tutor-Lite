@@ -1,13 +1,16 @@
 import 'package:dartz/dartz.dart';
 import 'package:hive/hive.dart';
 import 'package:injectable/injectable.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/errors/failures.dart';
 import '../../../../core/network/network_info.dart';
 import '../../domain/entities/summary.dart';
 import '../../domain/repositories/summary_repository.dart';
+import '../datasources/summary_queue_local_datasource.dart';
 import '../datasources/summary_remote_datasource.dart';
 import '../models/summary_model.dart';
+import '../models/summary_queue_model.dart';
 
 const _summaryCacheBox = 'summary_cache';
 
@@ -15,15 +18,19 @@ const _summaryCacheBox = 'summary_cache';
 class SummaryRepositoryImpl implements SummaryRepository {
   SummaryRepositoryImpl({
     required SummaryRemoteDataSource remoteDataSource,
+    required SummaryQueueLocalDataSource queueDataSource,
     required NetworkInfo networkInfo,
     required HiveInterface hive,
   })  : _remoteDataSource = remoteDataSource,
+        _queueDataSource = queueDataSource,
         _networkInfo = networkInfo,
         _hive = hive;
 
   final SummaryRemoteDataSource _remoteDataSource;
+  final SummaryQueueLocalDataSource _queueDataSource;
   final NetworkInfo _networkInfo;
   final HiveInterface _hive;
+  final Uuid _uuid = const Uuid();
 
   Future<Box<Map>> _openCacheBox() async {
     if (_hive.isBoxOpen(_summaryCacheBox)) {
@@ -70,8 +77,21 @@ class SummaryRepositoryImpl implements SummaryRepository {
       // Check if online before attempting remote call
       final connected = await _networkInfo.isConnected;
       if (!connected) {
-        return const Left(
-          NetworkFailure(message: 'No internet connection'),
+        // Queue the request for later processing
+        final queueItem = SummaryQueueModel(
+          id: _uuid.v4(),
+          sourceType: 'text',
+          text: text,
+          maxLength: maxLength,
+          createdAt: DateTime.now(),
+        );
+        await _queueDataSource.addToQueue(queueItem);
+        
+        // Return a special failure that indicates the request was queued
+        return Left(
+          NetworkFailure(
+            message: 'Request queued. Will be processed when online.',
+          ),
         );
       }
 
@@ -106,8 +126,21 @@ class SummaryRepositoryImpl implements SummaryRepository {
       // Check if online before attempting remote call
       final connected = await _networkInfo.isConnected;
       if (!connected) {
-        return const Left(
-          NetworkFailure(message: 'No internet connection'),
+        // Queue the request for later processing
+        final queueItem = SummaryQueueModel(
+          id: _uuid.v4(),
+          sourceType: 'pdf',
+          pdfUrl: pdfUrl,
+          maxLength: maxLength,
+          createdAt: DateTime.now(),
+        );
+        await _queueDataSource.addToQueue(queueItem);
+        
+        // Return a special failure that indicates the request was queued
+        return Left(
+          NetworkFailure(
+            message: 'Request queued. Will be processed when online.',
+          ),
         );
       }
 
@@ -200,6 +233,69 @@ class SummaryRepositoryImpl implements SummaryRepository {
           cause: error,
         ),
       );
+    }
+  }
+
+  /// Process all pending queued summaries
+  Future<void> processQueuedSummaries() async {
+    try {
+      final connected = await _networkInfo.isConnected;
+      if (!connected) {
+        return; // Not online, skip processing
+      }
+
+      final pendingItems = await _queueDataSource.getPendingItems();
+      const maxRetries = 3;
+
+      for (final item in pendingItems) {
+        // Skip items that have exceeded max retries
+        if (item.retryCount >= maxRetries) {
+          await _queueDataSource.markAsFailed(
+            item.id,
+            'Maximum retry count exceeded',
+          );
+          continue;
+        }
+
+        try {
+          // Mark as processing
+          await _queueDataSource.markAsProcessing(item.id);
+
+          SummaryModel result;
+          if (item.sourceType == 'text' && item.text != null) {
+            result = await _remoteDataSource.summarizeText(
+              text: item.text!,
+              maxLength: item.maxLength,
+            );
+          } else if (item.sourceType == 'pdf' && item.pdfUrl != null) {
+            result = await _remoteDataSource.summarizePdf(
+              pdfUrl: item.pdfUrl!,
+              maxLength: item.maxLength,
+            );
+          } else {
+            await _queueDataSource.markAsFailed(
+              item.id,
+              'Invalid queue item: missing required data',
+            );
+            continue;
+          }
+
+          // Cache the result
+          await _cacheSummary(result);
+
+          // Mark as completed (removes from queue)
+          await _queueDataSource.markAsCompleted(item.id);
+        } catch (error) {
+          // Mark as failed, will retry later
+          await _queueDataSource.markAsFailed(
+            item.id,
+            error.toString(),
+          );
+        }
+      }
+    } catch (error) {
+      // Log error but don't throw - queue processing should be resilient
+      // In production, you might want to log this to a monitoring service
     }
   }
 }

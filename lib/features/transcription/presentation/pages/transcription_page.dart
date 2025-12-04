@@ -511,7 +511,7 @@ class _ModeToggle extends StatelessWidget {
       },
       title: const Text('Always use offline mode'),
       subtitle: const Text(
-        'When enabled, recordings are saved as 16 kHz WAV and transcribed with on-device Whisper.',
+        'Offline mode let\'s you transcribe without internet connection. You are given a raw transcription, compared to the online mode that structures the note for you.',
       ),
       contentPadding: EdgeInsets.zero,
     );
@@ -530,9 +530,9 @@ class _FastModelToggle extends StatelessWidget {
       onChanged: (isOn) {
         context.read<TranscriptionBloc>().add(ToggleFastWhisperModel(isOn));
       },
-      title: const Text('Use fast Whisper model'),
+      title: const Text('Enable fast transcribe'),
       subtitle: const Text(
-        'ggml-tiny transcribes faster but trades some accuracy for speed.',
+        'Transcribes faster but trades some accuracy for speed.',
       ),
       contentPadding: EdgeInsets.zero,
     );
