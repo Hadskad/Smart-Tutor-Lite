@@ -176,7 +176,9 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
                       child: RadioListTile<int>(
                         title: Text(option),
                         value: index,
+                        // ignore: deprecated_member_use
                         groupValue: selectedAnswer,
+                        // ignore: deprecated_member_use
                         onChanged: (value) {
                           if (value != null) {
                             _answerQuestion(question.id, value);

@@ -85,4 +85,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'smart-tutor-lite-a66b5.firebasestorage.app',
     measurementId: 'G-FPPHRW1ZK6',
   );
+
 }

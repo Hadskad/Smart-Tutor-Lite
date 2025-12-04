@@ -7,6 +7,7 @@ import { extractTextFromPdf, downloadFile } from '../utils/storage-helpers';
 import { saveSummary } from '../utils/firestore-helpers';
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25MB limit
+const REGION = 'europe-west2';
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -79,5 +80,5 @@ app.post('/', async (req: Request, res: Response) => {
   }
 });
 
-export const summaries = functions.https.onRequest(app);
+export const summaries = functions.region(REGION).https.onRequest(app);
 

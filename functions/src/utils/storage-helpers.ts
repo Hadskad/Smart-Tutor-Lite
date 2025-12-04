@@ -36,6 +36,14 @@ export async function uploadFile(
   };
 }
 
+export async function downloadStorageObject(
+  storagePath: string,
+  destination: string,
+): Promise<void> {
+  const bucket = storage.bucket(BUCKET_NAME);
+  await bucket.file(storagePath).download({ destination });
+}
+
 /**
  * Get signed URL for file (for private files)
  */

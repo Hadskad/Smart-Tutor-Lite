@@ -2,7 +2,8 @@
 class ApiConstants {
   ApiConstants._();
 
-  static const String baseUrl = 'https://us-central1-smart-tutor-lite-a66b5.cloudfunctions.net';
+  static const String baseUrl =
+      'https://europe-west2-smart-tutor-lite-a66b5.cloudfunctions.net';
 
   // Endpoints
   static const String summarize = '/summaries';

@@ -7,6 +7,8 @@ import { saveFlashcards } from '../utils/firestore-helpers';
 import { getTranscription } from '../utils/firestore-helpers';
 import { db } from '../config/firebase-admin';
 
+const REGION = 'europe-west2';
+
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
@@ -85,5 +87,5 @@ app.post('/', async (req: Request, res: Response) => {
   }
 });
 
-export const flashcards = functions.https.onRequest(app);
+export const flashcards = functions.region(REGION).https.onRequest(app);
 

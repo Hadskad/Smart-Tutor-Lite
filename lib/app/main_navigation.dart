@@ -55,7 +55,7 @@ class _CustomCircularNavBar extends StatelessWidget {
     // Teal/cyan color for active state (matching image)
     const activeColor =
         Color.fromARGB(255, 6, 28, 36); // Using tertiary from theme
-    const inactiveColor = Color.fromARGB(255, 28, 29, 31); // Light grey
+    const inactiveColor = Color.fromARGB(255, 50, 64, 95); // Light grey
 
     return SafeArea(
       child: Padding(
@@ -64,10 +64,10 @@ class _CustomCircularNavBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(40),
-            color: const Color.fromARGB(255, 73, 51, 51),
+            color:  Color(0xFFDFF4F9),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
+                color: const Color.fromARGB(255, 89, 96, 192).withValues(alpha: 0.05),
                 blurRadius: 10,
                 offset: const Offset(0, -2),
               ),

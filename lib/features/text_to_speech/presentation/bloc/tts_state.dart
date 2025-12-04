@@ -24,8 +24,8 @@ class TtsProcessing extends TtsState {
 class TtsSuccess extends TtsState {
   const TtsSuccess({
     required this.job,
-    required List<TtsJob> jobs,
-  }) : super(jobs: jobs);
+    required super.jobs,
+  });
 
   final TtsJob job;
 

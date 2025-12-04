@@ -14,6 +14,10 @@ type SonioxApiResponse = {
     text?: string;
     confidence?: number;
   }>;
+  error?: {
+    message?: string;
+    code?: string;
+  };
   [key: string]: unknown;
 };
 
@@ -23,10 +27,30 @@ export type SonioxTranscription = {
   raw: SonioxApiResponse;
 };
 
+export type SonioxErrorCode =
+  | 'bad_audio'
+  | 'too_long'
+  | 'quota_exceeded'
+  | 'provider_down'
+  | 'timeout'
+  | 'unauthorized'
+  | 'unknown';
+
 export class SonioxError extends Error {
-  constructor(message: string, public status?: number) {
+  constructor(
+    message: string,
+    public options: { status?: number; code?: SonioxErrorCode } = {},
+  ) {
     super(message);
     this.name = 'SonioxError';
+  }
+
+  get status(): number | undefined {
+    return this.options.status;
+  }
+
+  get code(): SonioxErrorCode {
+    return this.options.code ?? 'unknown';
   }
 }
 
@@ -41,7 +65,9 @@ export const transcribeWithSoniox = async (
   } = {},
 ): Promise<SonioxTranscription> => {
   if (!audioBuffer?.length) {
-    throw new SonioxError('Audio buffer is empty.');
+    throw new SonioxError('Audio buffer is empty.', {
+      code: 'bad_audio',
+    });
   }
 
   const apiKey = getSonioxApiKey();
@@ -67,10 +93,15 @@ export const transcribeWithSoniox = async (
     });
 
     if (!response.ok) {
-      await safeJson(response);
+      const body = (await safeJson(response)) as SonioxApiResponse | null;
+      const code = mapStatusToCode(response.status, body?.error?.code);
       throw new SonioxError(
-        `Soniox request failed with status ${response.status}`,
-        response.status,
+        body?.error?.message ??
+          `Soniox request failed with status ${response.status}`,
+        {
+          status: response.status,
+          code,
+        },
       );
     }
 
@@ -81,7 +112,9 @@ export const transcribeWithSoniox = async (
       data.segments?.map((segment) => segment.text ?? '').join(' ').trim();
 
     if (!bestText) {
-      throw new SonioxError('Soniox response did not include any text.');
+      throw new SonioxError('Soniox response did not include any text.', {
+        code: 'bad_audio',
+      });
     }
 
     const confidence =
@@ -105,10 +138,15 @@ export const transcribeWithSoniox = async (
       throw error;
     }
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new SonioxError('Soniox request timed out.');
+      throw new SonioxError('Soniox request timed out.', {
+        code: 'timeout',
+      });
     }
     throw new SonioxError(
       error instanceof Error ? error.message : 'Unknown Soniox error.',
+      {
+        code: 'provider_down',
+      },
     );
   } finally {
     clearTimeout(timeout);
@@ -123,4 +161,36 @@ const safeJson = async (response: globalThis.Response) => {
   }
 };
 
+const mapStatusToCode = (
+  status: number,
+  providerCode?: string,
+): SonioxErrorCode => {
+  if (providerCode) {
+    switch (providerCode) {
+      case 'audio-too-long':
+        return 'too_long';
+      case 'audio-invalid':
+      case 'audio-too-quiet':
+        return 'bad_audio';
+      case 'quota-exceeded':
+        return 'quota_exceeded';
+      default:
+        break;
+    }
+  }
+
+  if (status === 401 || status === 403) {
+    return 'unauthorized';
+  }
+
+  if (status >= 500) {
+    return 'provider_down';
+  }
+
+  if (status === 408) {
+    return 'timeout';
+  }
+
+  return 'unknown';
+};
 

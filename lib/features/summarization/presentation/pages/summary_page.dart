@@ -368,7 +368,7 @@ class _SummaryPageState extends State<SummaryPage> {
               _showSummaryDialog(summary);
             },
           ),
-          ButtonBar(
+          OverflowBar(
             alignment: MainAxisAlignment.start,
             children: [
               TextButton.icon(

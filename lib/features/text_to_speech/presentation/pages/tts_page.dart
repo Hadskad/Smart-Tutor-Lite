@@ -413,7 +413,7 @@ class _TtsPageState extends State<TtsPage> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${_formatDate(job.createdAt)}'),
+            Text(_formatDate(job.createdAt)),
             if (job.status == 'completed' && job.audioUrl.isNotEmpty)
               const SizedBox(height: 4),
             if (job.status == 'completed' && job.audioUrl.isNotEmpty)

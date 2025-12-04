@@ -4,6 +4,7 @@ import 'package:injectable/injectable.dart';
 abstract class NetworkInfo {
   Future<bool> get isConnected;
   Stream<bool> get onStatusChange;
+  Future<ConnectivityResult> get connectionType;
 }
 
 @LazySingleton(as: NetworkInfo)
@@ -21,6 +22,16 @@ class NetworkInfoImpl implements NetworkInfo {
   @override
   Stream<bool> get onStatusChange =>
       _connectivity.onConnectivityChanged.map(_hasConnection);
+
+  @override
+  Future<ConnectivityResult> get connectionType async {
+    final result = await _connectivity.checkConnectivity();
+    final normalized = _normalizeResults(result);
+    if (normalized.isEmpty) {
+      return ConnectivityResult.none;
+    }
+    return normalized.first;
+  }
 
   bool _hasConnection(Object result) {
     final normalized = _normalizeResults(result);

@@ -25,3 +25,15 @@ class NetworkFailure extends Failure {
 class LocalFailure extends Failure {
   const LocalFailure({super.message, super.cause});
 }
+
+class WhisperInitFailure extends Failure {
+  const WhisperInitFailure({super.message, super.cause});
+}
+
+class WhisperRuntimeFailure extends Failure {
+  const WhisperRuntimeFailure({super.message, super.cause});
+}
+
+class WhisperNoSpeechFailure extends Failure {
+  const WhisperNoSpeechFailure({super.message, super.cause});
+}

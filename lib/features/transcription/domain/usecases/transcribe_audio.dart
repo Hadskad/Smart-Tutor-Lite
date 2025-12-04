@@ -11,7 +11,15 @@ class TranscribeAudio {
 
   final TranscriptionRepository _repository;
 
-  Future<Either<Failure, Transcription>> call(String audioPath) {
-    return _repository.transcribeAudio(audioPath);
+  Future<Either<Failure, Transcription>> call(
+    String audioPath, {
+    bool preferLocal = false,
+    String? modelAssetPath,
+  }) {
+    return _repository.transcribeAudio(
+      audioPath,
+      preferLocal: preferLocal,
+      modelAssetPath: modelAssetPath,
+    );
   }
 }

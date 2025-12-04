@@ -19,7 +19,7 @@ class HomeDashboardPage extends StatelessWidget {
         ),
       ),
       child: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,9 +28,7 @@ class HomeDashboardPage extends StatelessWidget {
               const SizedBox(height: 24),
               _buildSearchBar(context),
               const SizedBox(height: 24),
-              Expanded(
-                child: _buildFeatureGrid(context),
-              ),
+              _buildFeatureGrid(context),
             ],
           ),
         ),
@@ -148,10 +146,12 @@ class HomeDashboardPage extends StatelessWidget {
 
   Widget _buildFeatureGrid(BuildContext context) {
     return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 2,
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
-      childAspectRatio: 1.1,
+      childAspectRatio: 0.9,
       children: [
         _HomeFeatureCard(
           title: 'Smart record',
@@ -205,73 +205,71 @@ class _HomeFeatureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Teal/cyan for highlighted card (matching image)
-
-    final baseColor = const Color.fromARGB(255, 41, 28, 28);
-    final foreground = Colors.black87;
-    final iconBg = const Color.fromARGB(255, 87, 108, 151);
-    final iconColor = Colors.black54;
-
     return InkWell(
-        
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.all(2),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey,
-              borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(22),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFDFF4F9), // matches screenshot
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: const Color.fromARGB(255, 110, 106, 106).withValues(
+              alpha: 0.6,
             ),
-            child: Padding(
-              padding:  EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: iconBg,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      icon,
-                      color: iconColor,
-                      size: 24,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: foreground,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        subtitle,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: foreground,
-                              fontSize: 14,
-                            ),
-                      ),
-                       Icon(
-                        Icons.arrow_forward_ios,
-                        color: foreground,
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ],
+            width: 1.2,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(17),
+              ),
+              child: Icon(
+                icon,
+                color: Colors.black.withValues(alpha: 0.65),
+                size: 22,
               ),
             ),
-          ),
-        ));
+            const SizedBox(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 14,
+                  color: Colors.black.withValues(alpha: 0.65),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.black,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

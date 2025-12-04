@@ -3,12 +3,17 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import { db, admin } from '../config/firebase-admin';
-import { uploadFile, extractTextFromPdf, downloadFile } from '../utils/storage-helpers';
+import {
+  uploadFile,
+  extractTextFromPdf,
+  downloadFile,
+} from '../utils/storage-helpers';
 import { textToSpeechLong } from '../utils/tts-helpers';
 import { VoiceId, DEFAULT_VOICE_ID } from '../config/elevenlabs-tts';
 
 const app = express();
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25MB limit
+const REGION = 'europe-west2';
 app.use(cors({ origin: true }));
 app.use(express.json());
 
@@ -135,4 +140,4 @@ async function processTextToSpeech(
   }
 }
 
-export const tts = functions.https.onRequest(app);
+export const tts = functions.region(REGION).https.onRequest(app);

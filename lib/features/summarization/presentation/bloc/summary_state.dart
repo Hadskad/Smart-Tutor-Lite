@@ -24,8 +24,8 @@ class SummaryLoading extends SummaryState {
 class SummarySuccess extends SummaryState {
   const SummarySuccess({
     required this.summary,
-    required List<Summary> summaries,
-  }) : super(summaries: summaries);
+    required super.summaries,
+  });
 
   final Summary summary;
 

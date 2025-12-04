@@ -84,3 +84,20 @@ export async function saveFlashcards(data: {
   });
 }
 
+export async function saveStudyNote(data: {
+  id: string;
+  transcriptionId: string;
+  title: string;
+  summary: string;
+  keyPoints: string[];
+  actionItems: string[];
+  studyQuestions?: string[];
+  metadata?: Record<string, any>;
+}): Promise<void> {
+  await db.collection('study_notes').doc(data.id).set({
+    ...data,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+

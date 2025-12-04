@@ -20,12 +20,18 @@ class StopRecording extends TranscriptionEvent {
 }
 
 class TranscribeAudio extends TranscriptionEvent {
-  const TranscribeAudio(this.audioPath);
+  const TranscribeAudio(
+    this.audioPath, {
+    this.preferLocal = false,
+    this.modelAssetPath,
+  });
 
   final String audioPath;
+  final bool preferLocal;
+  final String? modelAssetPath;
 
   @override
-  List<Object?> get props => [audioPath];
+  List<Object?> get props => [audioPath, preferLocal, modelAssetPath];
 }
 
 class TranscriptionJobSnapshotReceived extends TranscriptionEvent {
@@ -54,6 +60,28 @@ class LoadTranscriptions extends TranscriptionEvent {
   const LoadTranscriptions();
 }
 
+class LoadTranscriptionPreferences extends TranscriptionEvent {
+  const LoadTranscriptionPreferences();
+}
+
+class ToggleOfflinePreference extends TranscriptionEvent {
+  const ToggleOfflinePreference(this.alwaysUseOffline);
+
+  final bool alwaysUseOffline;
+
+  @override
+  List<Object?> get props => [alwaysUseOffline];
+}
+
+class ToggleFastWhisperModel extends TranscriptionEvent {
+  const ToggleFastWhisperModel(this.useFastModel);
+
+  final bool useFastModel;
+
+  @override
+  List<Object?> get props => [useFastModel];
+}
+
 class CancelCloudTranscription extends TranscriptionEvent {
   const CancelCloudTranscription({this.reason});
 
@@ -70,4 +98,21 @@ class RetryCloudTranscription extends TranscriptionEvent {
 
   @override
   List<Object?> get props => [jobId];
+}
+
+class RetryNoteGeneration extends TranscriptionEvent {
+  const RetryNoteGeneration(this.jobId);
+
+  final String jobId;
+
+  @override
+  List<Object?> get props => [jobId];
+}
+
+class ConfirmOfflineFallback extends TranscriptionEvent {
+  const ConfirmOfflineFallback();
+}
+
+class RetryCloudFromFallback extends TranscriptionEvent {
+  const RetryCloudFromFallback();
 }

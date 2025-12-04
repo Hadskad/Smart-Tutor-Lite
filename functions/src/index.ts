@@ -4,4 +4,5 @@ export { summaries } from './api/summaries';
 export { quizzes } from './api/quizzes';
 export { flashcards } from './api/flashcards';
 export { tts } from './api/tts';
+export { processTranscriptionJobs } from './workers/transcription-jobs';
 

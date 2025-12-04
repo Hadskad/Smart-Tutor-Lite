@@ -98,5 +98,23 @@ class TranscriptionJobRepositoryImpl implements TranscriptionJobRepository {
       ));
     }
   }
+
+  @override
+  Future<Either<Failure, Unit>> requestNoteRetry(
+    String jobId, {
+    String? reason,
+  }) async {
+    try {
+      await _remoteDataSource.requestNoteRetry(jobId, reason: reason);
+      return const Right(unit);
+    } on Failure catch (failure) {
+      return Left(failure);
+    } catch (error) {
+      return Left(ServerFailure(
+        message: 'Unable to retry note generation',
+        cause: error,
+      ));
+    }
+  }
 }
 

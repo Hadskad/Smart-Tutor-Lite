@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
@@ -9,16 +10,20 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../../native_bridge/performance_bridge.dart';
 import '../../domain/entities/transcription.dart';
 import '../../domain/entities/transcription_job.dart';
 import '../../domain/entities/transcription_job_request.dart';
+import '../../domain/entities/transcription_preferences.dart';
+import '../../domain/repositories/transcription_preferences_repository.dart';
 import '../../domain/repositories/transcription_repository.dart';
 import '../../domain/usecases/cancel_transcription_job.dart';
 import '../../domain/usecases/create_transcription_job.dart';
 import '../../domain/usecases/request_transcription_job_retry.dart';
+import '../../domain/usecases/request_note_retry.dart';
 import '../../domain/usecases/transcribe_audio.dart' as usecase;
 import '../../domain/usecases/watch_transcription_job.dart';
 import 'transcription_event.dart';
@@ -33,6 +38,8 @@ const _kSilenceThresholdDb = -45.0;
 const _kSilenceTickTrigger = 6; // 3s at 500ms interval
 const _kAmplitudeSampleInterval = Duration(milliseconds: 500);
 
+enum TranscriptionExecutionMode { online, offline }
+
 @injectable
 class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
   TranscriptionBloc(
@@ -44,8 +51,13 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     this._watchTranscriptionJob,
     this._cancelTranscriptionJob,
     this._requestTranscriptionJobRetry,
+    this._requestNoteRetry,
+    this._preferencesRepository,
   ) : super(const TranscriptionInitial()) {
     on<LoadTranscriptions>(_onLoad);
+    on<LoadTranscriptionPreferences>(_onLoadPreferences);
+    on<ToggleOfflinePreference>(_onToggleOfflinePreference);
+    on<ToggleFastWhisperModel>(_onToggleFastWhisperModel);
     on<StartRecording>(_onStartRecording);
     on<StopRecording>(_onStopRecording);
     on<TranscribeAudio>(_onTranscribeAudio);
@@ -53,6 +65,11 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     on<TranscriptionJobSnapshotReceived>(_onTranscriptionJobSnapshot);
     on<CancelCloudTranscription>(_onCancelCloudTranscription);
     on<RetryCloudTranscription>(_onRetryCloudTranscription);
+    on<RetryNoteGeneration>(_onRetryNoteGeneration);
+    on<ConfirmOfflineFallback>(_onConfirmOfflineFallback);
+    on<RetryCloudFromFallback>(_onRetryCloudFromFallback);
+
+    add(const LoadTranscriptionPreferences());
   }
 
   final usecase.TranscribeAudio _transcribeAudio;
@@ -63,6 +80,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
   final WatchTranscriptionJob _watchTranscriptionJob;
   final CancelTranscriptionJob _cancelTranscriptionJob;
   final RequestTranscriptionJobRetry _requestTranscriptionJobRetry;
+  final RequestNoteRetry _requestNoteRetry;
+  final TranscriptionPreferencesRepository _preferencesRepository;
   final AudioRecorder _recorder = AudioRecorder();
   final Uuid _uuid = const Uuid();
   String? _currentRecordingPath;
@@ -71,11 +90,18 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
   final List<Transcription> _history = <Transcription>[];
   Timer? _recordingTicker;
   StreamSubscription<Amplitude>? _amplitudeSubscription;
-  StreamSubscription<Either<Failure, TranscriptionJob>>?
-      _cloudJobSubscription;
+  StreamSubscription<Either<Failure, TranscriptionJob>>? _cloudJobSubscription;
   String? _activeCloudJobId;
+  TranscriptionPreferences _preferences = const TranscriptionPreferences();
+  TranscriptionExecutionMode _plannedExecutionMode =
+      TranscriptionExecutionMode.online;
   bool _isInputTooLow = false;
   int _silenceTicks = 0;
+  ConnectivityResult _lastConnectionType = ConnectivityResult.none;
+  String? _pendingFallbackAudioPath;
+  Duration? _pendingFallbackDuration;
+  int? _pendingFallbackSizeBytes;
+  String? _lastCloudFailureMessage;
 
   Future<void> _onLoad(
     LoadTranscriptions event,
@@ -88,6 +114,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
           TranscriptionError(
             message: failure.message ?? 'Failed to load transcriptions',
             history: List.unmodifiable(_history),
+            preferences: _preferences,
           ),
         ),
         (transcriptions) {
@@ -97,6 +124,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
           emit(
             TranscriptionInitial(
               history: List.unmodifiable(_history),
+              preferences: _preferences,
             ),
           );
         },
@@ -106,9 +134,252 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
         TranscriptionError(
           message: 'Failed to load transcriptions',
           history: List.unmodifiable(_history),
+          preferences: _preferences,
         ),
       );
     }
+  }
+
+  RecordConfig _buildRecordConfig(TranscriptionExecutionMode mode) {
+    if (mode == TranscriptionExecutionMode.offline) {
+      return const RecordConfig(
+        encoder: AudioEncoder.wav,
+        sampleRate: 16000,
+        numChannels: 1,
+        bitRate: 256000,
+      );
+    }
+    return const RecordConfig(
+      encoder: AudioEncoder.aacLc,
+      sampleRate: 44100,
+      numChannels: 1,
+      bitRate: _kRecordingBitrate,
+    );
+  }
+
+  TranscriptionExecutionMode _resolveExecutionMode({
+    required bool hasNetwork,
+    required ConnectivityResult connectionType,
+  }) {
+    if (_preferences.alwaysUseOffline || !hasNetwork) {
+      return TranscriptionExecutionMode.offline;
+    }
+    if (!_isStrongConnection(connectionType)) {
+      return TranscriptionExecutionMode.offline;
+    }
+    return TranscriptionExecutionMode.online;
+  }
+
+  Future<void> _onLoadPreferences(
+    LoadTranscriptionPreferences event,
+    Emitter<TranscriptionState> emit,
+  ) async {
+    _preferences = await _preferencesRepository.loadPreferences();
+    _emitSnapshot(emit);
+  }
+
+  Future<void> _onToggleOfflinePreference(
+    ToggleOfflinePreference event,
+    Emitter<TranscriptionState> emit,
+  ) async {
+    _preferences = await _preferencesRepository
+        .setAlwaysUseOffline(event.alwaysUseOffline);
+    _emitSnapshot(emit);
+  }
+
+  Future<void> _onToggleFastWhisperModel(
+    ToggleFastWhisperModel event,
+    Emitter<TranscriptionState> emit,
+  ) async {
+    _preferences =
+        await _preferencesRepository.setUseFastWhisperModel(event.useFastModel);
+    _emitSnapshot(emit);
+  }
+
+  void _onConfirmOfflineFallback(
+    ConfirmOfflineFallback event,
+    Emitter<TranscriptionState> emit,
+  ) {
+    final audioPath = _pendingFallbackAudioPath;
+    if (audioPath == null) {
+      _emitNotice(
+        emit,
+        'Original recording is no longer available for offline mode.',
+        severity: TranscriptionNoticeSeverity.warning,
+      );
+      return;
+    }
+    _plannedExecutionMode = TranscriptionExecutionMode.offline;
+    _startOfflineTranscription(audioPath);
+  }
+
+  Future<void> _onRetryCloudFromFallback(
+    RetryCloudFromFallback event,
+    Emitter<TranscriptionState> emit,
+  ) async {
+    final audioPath = _pendingFallbackAudioPath;
+    final duration = _pendingFallbackDuration;
+    final size = _pendingFallbackSizeBytes;
+    if (audioPath == null || duration == null || size == null) {
+      _emitNotice(
+        emit,
+        'Original recording is no longer available for retry.',
+        severity: TranscriptionNoticeSeverity.warning,
+      );
+      return;
+    }
+    final hasNetwork = await _networkInfo.isConnected;
+    if (!hasNetwork) {
+      _emitNotice(
+        emit,
+        'No internet connection detected. Unable to retry cloud transcription.',
+        severity: TranscriptionNoticeSeverity.warning,
+      );
+      return;
+    }
+    final started = await _startCloudTranscriptionJob(
+      audioPath: audioPath,
+      duration: duration,
+      fileSizeBytes: size,
+      emit: emit,
+    );
+    if (!started) {
+      _promptOfflineFallback(
+        emit,
+        reason: _lastCloudFailureMessage ??
+            'Cloud transcription is still unavailable. Switch to on-device mode?',
+      );
+    }
+  }
+
+  void _emitSnapshot(Emitter<TranscriptionState> emit) {
+    final current = state;
+    if (current is TranscriptionRecording) {
+      emit(
+        current.copyWith(
+          history: current.history,
+          preferences: _preferences,
+        ),
+      );
+    } else if (current is TranscriptionProcessing) {
+      emit(
+        TranscriptionProcessing(
+          audioPath: current.audioPath,
+          history: current.history,
+          preferences: _preferences,
+        ),
+      );
+    } else if (current is TranscriptionSuccess) {
+      emit(
+        TranscriptionSuccess(
+          transcription: current.transcription,
+          metrics: current.metrics,
+          history: current.history,
+          preferences: _preferences,
+        ),
+      );
+    } else if (current is TranscriptionError) {
+      emit(
+        TranscriptionError(
+          message: current.message,
+          history: current.history,
+          preferences: _preferences,
+        ),
+      );
+    } else if (current is CloudTranscriptionState) {
+      emit(
+        CloudTranscriptionState(
+          job: current.job,
+          history: current.history,
+          preferences: _preferences,
+        ),
+      );
+    } else if (current is TranscriptionNotice) {
+      emit(
+        TranscriptionNotice(
+          message: current.message,
+          severity: current.severity,
+          history: current.history,
+          preferences: _preferences,
+        ),
+      );
+    } else {
+      emit(
+        TranscriptionInitial(
+          history: List.unmodifiable(_history),
+          preferences: _preferences,
+        ),
+      );
+    }
+  }
+
+  String get _selectedWhisperModel => _preferences.useFastWhisperModel
+      ? AppConstants.whisperFastModel
+      : AppConstants.whisperDefaultModel;
+
+  bool _isStrongConnection(ConnectivityResult result) {
+    return result == ConnectivityResult.wifi ||
+        result == ConnectivityResult.ethernet;
+  }
+
+  bool _isLargeRecording(Duration duration, int fileSizeBytes) {
+    return duration.inMinutes >= 45 || fileSizeBytes >= 150 * 1024 * 1024;
+  }
+
+  void _setFallbackContext({
+    required String audioPath,
+    required Duration duration,
+    required int fileSizeBytes,
+  }) {
+    _pendingFallbackAudioPath = audioPath;
+    _pendingFallbackDuration = duration;
+    _pendingFallbackSizeBytes = fileSizeBytes;
+  }
+
+  void _clearFallbackContext() {
+    _pendingFallbackAudioPath = null;
+    _pendingFallbackDuration = null;
+    _pendingFallbackSizeBytes = null;
+  }
+
+  void _startOfflineTranscription(String audioPath) {
+    add(
+      TranscribeAudio(
+        audioPath,
+        preferLocal: true,
+        modelAssetPath: _selectedWhisperModel,
+      ),
+    );
+  }
+
+  void _promptOfflineFallback(
+    Emitter<TranscriptionState> emit, {
+    String? reason,
+  }) {
+    final audioPath = _pendingFallbackAudioPath;
+    final duration = _pendingFallbackDuration;
+    final size = _pendingFallbackSizeBytes;
+    if (audioPath == null || duration == null || size == null) {
+      emit(
+        TranscriptionError(
+          message:
+              'Original recording is no longer available for offline fallback.',
+          history: List.unmodifiable(_history),
+          preferences: _preferences,
+        ),
+      );
+      return;
+    }
+    emit(
+      TranscriptionFallbackPrompt(
+        audioPath: audioPath,
+        duration: duration,
+        fileSizeBytes: size,
+        reason: reason,
+        history: List.unmodifiable(_history),
+        preferences: _preferences,
+      ),
+    );
   }
 
   Future<void> _onStartRecording(
@@ -118,9 +389,11 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     if (_activeCloudJobId != null) {
       emit(
         TranscriptionNotice(
-          message: 'Cloud transcription still running. Please wait or cancel it before recording again.',
+          message:
+              'Cloud transcription still running. Please wait or cancel it before recording again.',
           severity: TranscriptionNoticeSeverity.warning,
           history: List.unmodifiable(_history),
+          preferences: _preferences,
         ),
       );
       return;
@@ -129,31 +402,39 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
       return;
     }
 
+    final connectionType = await _networkInfo.connectionType;
+    _lastConnectionType = connectionType;
+    final hasNetwork = connectionType != ConnectivityResult.none;
+    _plannedExecutionMode = _resolveExecutionMode(
+      hasNetwork: hasNetwork,
+      connectionType: connectionType,
+    );
+
     final hasPermission = await _recorder.hasPermission();
     if (!hasPermission) {
       emit(
         TranscriptionError(
           message: 'Microphone permission denied',
           history: List.unmodifiable(_history),
+          preferences: _preferences,
         ),
       );
       return;
     }
 
     final tempDir = await getTemporaryDirectory();
+    final extension =
+        _plannedExecutionMode == TranscriptionExecutionMode.offline
+            ? 'wav'
+            : 'm4a';
     final filePath = p.join(
       tempDir.path,
-      'transcription_${_uuid.v4()}.m4a',
+      'transcription_${_uuid.v4()}.$extension',
     );
 
     try {
       await _recorder.start(
-        RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          sampleRate: 44100,
-          numChannels: 1,
-          bitRate: _kRecordingBitrate,
-        ),
+        _buildRecordConfig(_plannedExecutionMode),
         path: filePath,
       );
       _currentRecordingPath = filePath;
@@ -170,6 +451,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
           estimatedSizeBytes: 0,
           isInputTooLow: false,
           history: List.unmodifiable(_history),
+          preferences: _preferences,
         ),
       );
     } catch (error) {
@@ -179,6 +461,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
         TranscriptionError(
           message: error.toString(),
           history: List.unmodifiable(_history),
+          preferences: _preferences,
         ),
       );
     }
@@ -200,13 +483,15 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
           TranscriptionError(
             message: 'Recording failed. Please try again.',
             history: List.unmodifiable(_history),
+            preferences: _preferences,
           ),
         );
         return;
       }
       final startedAt = _recordingStartedAt;
-      final duration =
-          startedAt != null ? DateTime.now().difference(startedAt) : Duration.zero;
+      final duration = startedAt != null
+          ? DateTime.now().difference(startedAt)
+          : Duration.zero;
       final file = File(audioPath);
       final fileSizeBytes = await file.length();
 
@@ -219,6 +504,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
             message:
                 'Recording is too short. Please capture at least ${_kMinRecordingDuration.inSeconds} seconds.',
             history: List.unmodifiable(_history),
+            preferences: _preferences,
           ),
         );
         return;
@@ -233,6 +519,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
             message:
                 'We could not detect any audio. Please make sure the microphone is unobstructed.',
             history: List.unmodifiable(_history),
+            preferences: _preferences,
           ),
         );
         return;
@@ -248,24 +535,54 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
         );
       }
 
-      final hasNetwork = await _networkInfo.isConnected;
-      var startedCloud = false;
-      if (hasNetwork) {
-        startedCloud = await _startCloudTranscriptionJob(
-          audioPath: audioPath,
-          duration: duration,
-          fileSizeBytes: fileSizeBytes,
-          emit: emit,
+      _setFallbackContext(
+        audioPath: audioPath,
+        duration: duration,
+        fileSizeBytes: fileSizeBytes,
+      );
+
+      if (_plannedExecutionMode == TranscriptionExecutionMode.online &&
+          !_isStrongConnection(_lastConnectionType) &&
+          _isLargeRecording(duration, fileSizeBytes)) {
+        _plannedExecutionMode = TranscriptionExecutionMode.offline;
+        _emitNotice(
+          emit,
+          'Connection looks weak for this long recording. Using on-device mode instead.',
+          severity: TranscriptionNoticeSeverity.warning,
         );
       }
+
+      final useOnline =
+          _plannedExecutionMode == TranscriptionExecutionMode.online;
+      var startedCloud = false;
+      if (useOnline) {
+        final hasNetwork = await _networkInfo.isConnected;
+        if (hasNetwork) {
+          startedCloud = await _startCloudTranscriptionJob(
+            audioPath: audioPath,
+            duration: duration,
+            fileSizeBytes: fileSizeBytes,
+            emit: emit,
+          );
+        }
+      }
       if (!startedCloud) {
-        add(TranscribeAudio(audioPath));
+        if (_plannedExecutionMode == TranscriptionExecutionMode.offline) {
+          _startOfflineTranscription(audioPath);
+        } else {
+          _promptOfflineFallback(
+            emit,
+            reason: _lastCloudFailureMessage ??
+                'Cloud transcription is unavailable. Switch to on-device mode to finish faster?',
+          );
+        }
       }
     } catch (error) {
       emit(
         TranscriptionError(
           message: 'Failed to stop recording',
           history: List.unmodifiable(_history),
+          preferences: _preferences,
         ),
       );
     } finally {
@@ -285,37 +602,36 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
       TranscriptionProcessing(
         audioPath: audioPath,
         history: List.unmodifiable(_history),
+        preferences: _preferences,
       ),
     );
 
     await _performanceBridge.startSegment('transcription');
 
     try {
-      final hasNetwork = await _networkInfo.isConnected;
-      if (!hasNetwork) {
-        _emitNotice(
-          emit,
-          'No internet connection detected. Using on-device transcription.',
-          severity: TranscriptionNoticeSeverity.warning,
-        );
-      }
-      final result = await _transcribeAudio(audioPath);
+      final result = await _transcribeAudio(
+        audioPath,
+        preferLocal: event.preferLocal,
+        modelAssetPath: event.modelAssetPath ?? _selectedWhisperModel,
+      );
       final metrics = await _performanceBridge.endSegment('transcription');
       result.fold(
         (failure) => emit(
           TranscriptionError(
             message: failure.message ?? 'Transcription failed',
             history: List.unmodifiable(_history),
+            preferences: _preferences,
           ),
         ),
         (transcription) {
           _history.insert(0, transcription);
-          _lastRecordedFilePath = null;
+          _deleteRecordedFile();
           emit(
             TranscriptionSuccess(
               transcription: transcription,
               history: List.unmodifiable(_history),
               metrics: metrics,
+              preferences: _preferences,
             ),
           );
         },
@@ -326,6 +642,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
         TranscriptionError(
           message: 'Unable to process audio',
           history: List.unmodifiable(_history),
+          preferences: _preferences,
         ),
       );
     }
@@ -348,6 +665,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
         estimatedSizeBytes: event.estimatedSizeBytes,
         isInputTooLow: event.isInputTooLow,
         history: List.unmodifiable(_history),
+        preferences: _preferences,
       ),
     );
   }
@@ -385,24 +703,28 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
       userId: _resolveUserId(),
       localAudioPath: p.basename(audioPath),
     );
+    _lastCloudFailureMessage = null;
     final result = await _createTranscriptionJob(request);
     return result.fold(
       (failure) {
+        _lastCloudFailureMessage =
+            failure.message ?? 'Cloud transcription is unavailable.';
         _emitNotice(
           emit,
-          failure.message ??
-              'Cloud transcription is unavailable. Falling back to on-device mode.',
+          _lastCloudFailureMessage!,
           severity: TranscriptionNoticeSeverity.warning,
         );
         return false;
       },
       (job) {
+        _lastCloudFailureMessage = null;
         _activeCloudJobId = job.id;
         _listenToCloudJob(job.id);
         emit(
           CloudTranscriptionState(
             job: job,
             history: List.unmodifiable(_history),
+            preferences: _preferences,
           ),
         );
         return true;
@@ -468,8 +790,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     _activeCloudJobId = null;
     await _cloudJobSubscription?.cancel();
     _cloudJobSubscription = null;
-    if (job.status == TranscriptionJobStatus.done &&
-        job.transcriptId != null) {
+    if (job.status == TranscriptionJobStatus.done && job.transcriptId != null) {
       final result =
           await _transcriptionRepository.getTranscription(job.transcriptId!);
       await result.fold(
@@ -479,6 +800,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
               message: failure.message ??
                   'Cloud transcription completed but note is unavailable.',
               history: List.unmodifiable(_history),
+              preferences: _preferences,
             ),
           );
         },
@@ -489,17 +811,18 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
               transcription: transcription,
               history: List.unmodifiable(_history),
               metrics: null,
+              preferences: _preferences,
             ),
           );
           await _deleteRecordedFile();
         },
       );
     } else if (job.status == TranscriptionJobStatus.error) {
-      emit(
-        TranscriptionError(
-          message: job.errorMessage ?? 'Cloud transcription failed.',
-          history: List.unmodifiable(_history),
-        ),
+      _lastCloudFailureMessage =
+          job.errorMessage ?? 'Cloud transcription failed.';
+      _promptOfflineFallback(
+        emit,
+        reason: _lastCloudFailureMessage,
       );
     }
   }
@@ -510,11 +833,11 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
   ) async {
     await event.result.fold(
       (failure) async {
-        emit(
-          TranscriptionError(
-            message: failure.message ?? 'Cloud transcription failed',
-            history: List.unmodifiable(_history),
-          ),
+        _lastCloudFailureMessage =
+            failure.message ?? 'Cloud transcription failed.';
+        _promptOfflineFallback(
+          emit,
+          reason: _lastCloudFailureMessage,
         );
       },
       (job) async {
@@ -522,6 +845,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
           CloudTranscriptionState(
             job: job,
             history: List.unmodifiable(_history),
+            preferences: _preferences,
           ),
         );
         if (job.isTerminal) {
@@ -545,6 +869,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
         TranscriptionError(
           message: failure.message ?? 'Unable to cancel cloud transcription',
           history: List.unmodifiable(_history),
+          preferences: _preferences,
         ),
       ),
       (_) => _emitNotice(
@@ -564,11 +889,32 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
         TranscriptionError(
           message: failure.message ?? 'Unable to request retry',
           history: List.unmodifiable(_history),
+          preferences: _preferences,
         ),
       ),
       (_) => _emitNotice(
         emit,
         'Retry requested. We will attempt to rerun the transcription shortly.',
+      ),
+    );
+  }
+
+  Future<void> _onRetryNoteGeneration(
+    RetryNoteGeneration event,
+    Emitter<TranscriptionState> emit,
+  ) async {
+    final result = await _requestNoteRetry(event.jobId);
+    result.fold(
+      (failure) => emit(
+        TranscriptionError(
+          message: failure.message ?? 'Unable to retry note generation',
+          history: List.unmodifiable(_history),
+          preferences: _preferences,
+        ),
+      ),
+      (_) => _emitNotice(
+        emit,
+        'Retrying smart note generation...',
       ),
     );
   }
@@ -592,6 +938,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
       }
     }
     _lastRecordedFilePath = null;
+    _clearFallbackContext();
   }
 
   void _emitNotice(
@@ -604,6 +951,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
         message: message,
         severity: severity,
         history: List.unmodifiable(_history),
+        preferences: _preferences,
       ),
     );
   }

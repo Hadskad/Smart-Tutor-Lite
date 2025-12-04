@@ -237,15 +237,19 @@ class _QuizCreationPageState extends State<QuizCreationPage> {
                 ),
               )
             else
-              ...sources.map((source) => RadioListTile<String>(
-                    title: Text(source['title'] ?? ''),
-                    subtitle: Text(source['date'] ?? ''),
-                    value: source['id'] ?? '',
-                    groupValue: _selectedSourceId,
-                    onChanged: (value) {
-                      setState(() => _selectedSourceId = value);
-                    },
-                  )),
+              ...sources.map(
+                (source) => RadioListTile<String>(
+                  title: Text(source['title'] ?? ''),
+                  subtitle: Text(source['date'] ?? ''),
+                  value: source['id'] ?? '',
+                  // ignore: deprecated_member_use
+                  groupValue: _selectedSourceId,
+                  // ignore: deprecated_member_use
+                  onChanged: (value) {
+                    setState(() => _selectedSourceId = value);
+                  },
+                ),
+              ),
           ],
         ),
       ),

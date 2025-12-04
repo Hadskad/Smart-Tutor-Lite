@@ -21,6 +21,9 @@ class TranscriptionJobModel extends TranscriptionJob {
     super.noteId,
     super.metadata,
     super.canRetry = false,
+    super.noteStatus,
+    super.noteError,
+    super.noteCanRetry = false,
   });
 
   factory TranscriptionJobModel.fromSnapshot(
@@ -44,6 +47,9 @@ class TranscriptionJobModel extends TranscriptionJob {
       transcriptId: data['transcriptId'] as String?,
       noteId: data['noteId'] as String?,
       metadata: Map<String, dynamic>.from(data['metadata'] as Map? ?? {}),
+      noteStatus: data['noteStatus'] as String?,
+      noteError: data['noteError'] as String?,
+      noteCanRetry: data['noteCanRetry'] as bool? ?? false,
       canRetry: data['canRetry'] as bool? ?? false,
     );
   }
@@ -62,6 +68,9 @@ class TranscriptionJobModel extends TranscriptionJob {
         'transcriptId': transcriptId,
         'noteId': noteId,
         'metadata': metadata,
+        'noteStatus': noteStatus,
+        'noteError': noteError,
+        'noteCanRetry': noteCanRetry,
         'canRetry': canRetry,
         'createdAt': Timestamp.fromDate(createdAt),
         'updatedAt': Timestamp.fromDate(updatedAt),

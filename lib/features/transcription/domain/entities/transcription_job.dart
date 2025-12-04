@@ -43,6 +43,9 @@ class TranscriptionJob extends Equatable {
     this.noteId,
     this.metadata = const {},
     this.canRetry = false,
+    this.noteStatus,
+    this.noteError,
+    this.noteCanRetry = false,
   });
 
   final String? userId;
@@ -62,6 +65,9 @@ class TranscriptionJob extends Equatable {
   final String? noteId;
   final Map<String, dynamic> metadata;
   final bool canRetry;
+  final String? noteStatus;
+  final String? noteError;
+  final bool noteCanRetry;
 
   bool get isTerminal => switch (status) {
         TranscriptionJobStatus.done ||
@@ -89,6 +95,9 @@ class TranscriptionJob extends Equatable {
         noteId,
         metadata,
         canRetry,
+        noteStatus,
+        noteError,
+        noteCanRetry,
       ];
 }
 

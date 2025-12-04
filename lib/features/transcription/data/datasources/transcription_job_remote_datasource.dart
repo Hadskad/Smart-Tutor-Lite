@@ -21,6 +21,8 @@ abstract class TranscriptionJobRemoteDataSource {
   Future<void> cancelJob(String jobId, {String? reason});
 
   Future<void> requestRetry(String jobId, {String? reason});
+
+  Future<void> requestNoteRetry(String jobId, {String? reason});
 }
 
 @LazySingleton(as: TranscriptionJobRemoteDataSource)
@@ -63,6 +65,8 @@ class TranscriptionJobRemoteDataSourceImpl
       'metadata': request.metadata,
       'progress': 0.0,
       'canRetry': false,
+       'noteStatus': 'pending',
+       'noteCanRetry': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -119,9 +123,26 @@ class TranscriptionJobRemoteDataSourceImpl
   @override
   Future<void> requestRetry(String jobId, {String? reason}) {
     return _jobsCollection.doc(jobId).update({
+      'status': TranscriptionJobStatus.processing.label,
       'retryRequestedAt': FieldValue.serverTimestamp(),
       'retryReason': reason,
       'canRetry': false,
+      'noteStatus': 'pending',
+      'noteError': FieldValue.delete(),
+      'noteCanRetry': false,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Future<void> requestNoteRetry(String jobId, {String? reason}) {
+    return _jobsCollection.doc(jobId).update({
+      'status': TranscriptionJobStatus.generatingNote.label,
+      'noteStatus': 'pending',
+      'noteRetryRequestedAt': FieldValue.serverTimestamp(),
+      'noteRetryReason': reason,
+      'noteCanRetry': false,
+      'noteError': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

@@ -7,6 +7,7 @@ import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:injectable/injectable.dart';
 import 'package:logger/logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/network/api_client.dart';
 import 'core/utils/logger.dart';
@@ -55,5 +56,10 @@ abstract class ExternalModule {
   Future<HiveInterface> hive() async {
     await Hive.initFlutter();
     return Hive;
+  }
+
+  @preResolve
+  Future<SharedPreferences> sharedPreferences() async {
+    return SharedPreferences.getInstance();
   }
 }

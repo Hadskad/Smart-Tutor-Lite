@@ -14,5 +14,10 @@ abstract class TranscriptionJobRepository {
   Future<Either<Failure, Unit>> cancelJob(String jobId, {String? reason});
 
   Future<Either<Failure, Unit>> requestRetry(String jobId, {String? reason});
+
+  Future<Either<Failure, Unit>> requestNoteRetry(
+    String jobId, {
+    String? reason,
+  });
 }
 

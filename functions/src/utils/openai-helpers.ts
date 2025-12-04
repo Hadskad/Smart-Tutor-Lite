@@ -18,6 +18,14 @@ export interface GenerateFlashcardsOptions {
   numFlashcards: number;
 }
 
+export interface StudyNote {
+  title: string;
+  summary: string;
+  keyPoints: string[];
+  actionItems: string[];
+  studyQuestions: string[];
+}
+
 /**
  * Summarize text using OpenAI
  */
@@ -174,6 +182,71 @@ ${content}`;
   }
 }
 
+export async function generateStudyNotes(content: string): Promise<StudyNote> {
+  const prompt = `
+<system>
+You create accurate, student-friendly study notes strictly from the provided transcript.
+Respond ONLY in valid JSON with this structure:
+{
+  "title": "short descriptive title",
+  "summary": "2–3 sentence overview",
+  "key_points": ["concise bullet", "..."],
+  "action_items": ["practical step", "..."],
+  "study_questions": ["thoughtful question", "..."]
+}
+
+Guidelines:
+- Never fabricate content—use transcript only.
+- Key points should capture major ideas (4–6 items).
+- Action items should be concrete steps for the learner (2–4 items).
+- Study questions should prompt reflection or comprehension (3–5 items).
+- Keep sentences under 30 words when possible.
+</system>
+
+<user>
+Generate structured study notes for this transcript:
+${content}
+</user>
+`;
+
+  const response = await openai.responses.create({
+    model: GPT_MODEL,
+    input: prompt,
+    temperature: 0.15,
+  });
+
+  const text = extractResponseText(response);
+  if (!text) {
+    throw new Error('Study note generation failed: empty response');
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return {
+      title: ensureString(parsed.title, 'title'),
+      summary: ensureString(parsed.summary, 'summary'),
+      keyPoints: ensureStringArray(
+        parsed.key_points ?? parsed.keyPoints,
+        'key_points',
+      ),
+      actionItems: ensureStringArray(
+        parsed.action_items ?? parsed.actionItems,
+        'action_items',
+      ),
+      studyQuestions: ensureStringArray(
+        parsed.study_questions ?? parsed.studyQuestions,
+        'study_questions',
+      ),
+    };
+  } catch (error) {
+    throw new Error(
+      `Failed to parse study note response: ${
+        error instanceof Error ? error.message : error
+      }`,
+    );
+  }
+}
+
 interface QuizQuestion {
   question: string;
   options: string[];
@@ -259,9 +332,7 @@ function normalizeQuizQuestions(
   });
 
   if (normalized.length < expectedCount) {
-    console.warn(
-      `Expected ${expectedCount} quiz questions but received ${normalized.length}`,
-    );
+    
   }
 
   return normalized;
@@ -287,9 +358,7 @@ function normalizeFlashcards(
   });
 
   if (normalized.length < expectedCount) {
-    console.warn(
-      `Expected ${expectedCount} flashcards but received ${normalized.length}`,
-    );
+    
   }
 
   return normalized;

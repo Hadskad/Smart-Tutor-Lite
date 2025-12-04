@@ -54,9 +54,15 @@ class TranscriptionRepositoryImpl implements TranscriptionRepository {
 
   @override
   Future<Either<Failure, Transcription>> transcribeAudio(
-      String audioPath) async {
+    String audioPath, {
+    bool preferLocal = false,
+    String? modelAssetPath,
+  }) async {
     try {
-      final rawText = await _localDataSource.transcribe(audioPath);
+      final rawText = await _localDataSource.transcribe(
+        audioPath,
+        modelAssetPath: modelAssetPath,
+      );
       final model = TranscriptionModel(
         id: _uuid.v4(),
         text: rawText,
@@ -69,17 +75,20 @@ class TranscriptionRepositoryImpl implements TranscriptionRepository {
       return Right(model.toEntity());
     } on Failure catch (failure) {
       final connected = await _networkInfo.isConnected;
-      if (!connected) {
+      if (preferLocal || !connected) {
         return Left(
-          NetworkFailure(
-            message:
-                'No internet connection for cloud transcription. Please reconnect or retry once you are online.',
-            cause: failure,
-          ),
+          preferLocal
+              ? failure
+              : NetworkFailure(
+                  message:
+                      'No internet connection for cloud transcription. Please reconnect or retry once you are online.',
+                  cause: failure,
+                ),
         );
       }
       try {
-        final remoteModel = await _remoteDataSource.transcribeAudio(audioPath);
+        final remoteModel =
+            await _remoteDataSource.transcribeAudio(audioPath);
         await _cacheTranscription(remoteModel);
         return Right(remoteModel.toEntity());
       } on Failure catch (remoteFailure) {

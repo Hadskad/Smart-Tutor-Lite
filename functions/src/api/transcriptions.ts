@@ -14,6 +14,7 @@ import {
   transcribeWithSoniox,
 } from '../utils/soniox-helpers';
 
+const REGION = 'europe-west2';
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
@@ -157,5 +158,5 @@ app.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
-export const transcriptions = functions.https.onRequest(app);
+export const transcriptions = functions.region(REGION).https.onRequest(app);
 

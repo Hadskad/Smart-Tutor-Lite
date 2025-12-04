@@ -22,6 +22,7 @@ class TranscriptionPage extends StatefulWidget {
 
 class _TranscriptionPageState extends State<TranscriptionPage> {
   late final TranscriptionBloc _bloc;
+  bool _isFallbackDialogVisible = false;
 
   @override
   void initState() {
@@ -74,6 +75,8 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                 behavior: SnackBarBehavior.floating,
               ),
             );
+          } else if (state is TranscriptionFallbackPrompt) {
+            _showFallbackDialog(state);
           }
         },
         builder: (context, state) {
@@ -96,49 +99,60 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                   constraints: const BoxConstraints(maxWidth: 600),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Enhanced Recorder Widget Container
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).cardColor,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                blurRadius: 20,
-                                offset: const Offset(0, 4),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Enhanced Recorder Widget Container
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).cardColor,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outline
+                                    .withValues(alpha: 0.1),
                               ),
-                            ],
-                            border: Border.all(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .outline
-                                  .withValues(alpha: 0.1),
                             ),
+                            child: const AudioRecorderWidget(),
                           ),
-                          child: const AudioRecorderWidget(),
-                        ),
-                        const SizedBox(height: 24),
-
-                        _buildStatus(state),
-                        const SizedBox(height: 24),
-
-                        Row(
-                          children: [
-                            Text(
-                              'Recent Transcriptions',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            const Spacer(),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-
-                        Expanded(child: _buildHistory(state.history)),
-                      ],
+                          const SizedBox(height: 24),
+                          _ModeToggle(
+                            value: state.preferences.alwaysUseOffline,
+                          ),
+                          const SizedBox(height: 8),
+                          _FastModelToggle(
+                            value: state.preferences.useFastWhisperModel,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildStatus(state),
+                          const SizedBox(height: 24),
+                          Row(
+                            children: [
+                              Text(
+                                'Recent Transcriptions',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const Spacer(),
+                            ],
+                          ),
+                          Text(
+                            'You can leave this page—jobs keep running in the background and appear here when ready.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildHistory(state.history),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -259,6 +273,8 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
     }
 
     return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: history.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
@@ -394,6 +410,49 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
       },
     );
   }
+
+  Future<void> _showFallbackDialog(
+    TranscriptionFallbackPrompt state,
+  ) async {
+    if (!mounted || _isFallbackDialogVisible) {
+      return;
+    }
+    _isFallbackDialogVisible = true;
+    final bloc = context.read<TranscriptionBloc>();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final reason = state.reason ??
+            'Switch to on-device mode to finish faster? (Possibly lesser quality).';
+        return AlertDialog(
+          title: const Text('Cloud transcription issue'),
+          content: Text(reason),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                bloc.add(const RetryCloudFromFallback());
+              },
+              child: const Text('Retry online transcription'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                bloc.add(const ConfirmOfflineFallback());
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (mounted) {
+      _isFallbackDialogVisible = false;
+    }
+  }
 }
 
 class _StatusContainer extends StatelessWidget {
@@ -438,6 +497,48 @@ class _StatusContainer extends StatelessWidget {
   }
 }
 
+class _ModeToggle extends StatelessWidget {
+  const _ModeToggle({required this.value});
+
+  final bool value;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile.adaptive(
+      value: value,
+      onChanged: (isOn) {
+        context.read<TranscriptionBloc>().add(ToggleOfflinePreference(isOn));
+      },
+      title: const Text('Always use offline mode'),
+      subtitle: const Text(
+        'When enabled, recordings are saved as 16 kHz WAV and transcribed with on-device Whisper.',
+      ),
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+}
+
+class _FastModelToggle extends StatelessWidget {
+  const _FastModelToggle({required this.value});
+
+  final bool value;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile.adaptive(
+      value: value,
+      onChanged: (isOn) {
+        context.read<TranscriptionBloc>().add(ToggleFastWhisperModel(isOn));
+      },
+      title: const Text('Use fast Whisper model'),
+      subtitle: const Text(
+        'ggml-tiny transcribes faster but trades some accuracy for speed.',
+      ),
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+}
+
 class _CloudTranscriptionStatus extends StatelessWidget {
   const _CloudTranscriptionStatus({required this.job});
 
@@ -447,7 +548,8 @@ class _CloudTranscriptionStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _colorForStatus(context, job.status);
     final label = _labelForStatus(job);
-    final progress = job.progress != null ? job.progress!.clamp(0, 100) / 100 : null;
+    final progress =
+        job.progress != null ? job.progress!.clamp(0, 100) / 100 : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -463,7 +565,34 @@ class _CloudTranscriptionStatus extends StatelessWidget {
           backgroundColor: color.withValues(alpha: 0.1),
           valueColor: AlwaysStoppedAnimation<Color>(color),
         ),
+        const SizedBox(height: 8),
+        Text(
+          'You can safely leave this screen; progress is tracked in Recent Transcriptions.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
         const SizedBox(height: 12),
+        if (job.noteStatus == 'error' && job.noteError != null)
+          Text(
+            'Smart notes failed: ${job.noteError}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+          )
+        else if (job.noteStatus == 'ready')
+          Text(
+            'Smart notes ready.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.secondary,
+                  fontWeight: FontWeight.w600,
+                ),
+          )
+        else if (job.status == TranscriptionJobStatus.generatingNote)
+          Text(
+            'Creating structured lecture notes...',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        if (job.noteStatus != null) const SizedBox(height: 12),
         Row(
           children: [
             if (!job.isTerminal)
@@ -475,7 +604,15 @@ class _CloudTranscriptionStatus extends StatelessWidget {
                 label: const Text('Cancel'),
               ),
             const Spacer(),
-            if (job.canRetry)
+            if (job.noteStatus == 'error' && job.noteCanRetry)
+              FilledButton.icon(
+                onPressed: () => context
+                    .read<TranscriptionBloc>()
+                    .add(RetryNoteGeneration(job.id)),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry notes'),
+              )
+            else if (job.canRetry)
               FilledButton.icon(
                 onPressed: () => context
                     .read<TranscriptionBloc>()
@@ -494,11 +631,11 @@ class _CloudTranscriptionStatus extends StatelessWidget {
       case TranscriptionJobStatus.pending:
         return 'Preparing upload...';
       case TranscriptionJobStatus.uploading:
-        return 'Uploading audio to the cloud...';
+        return 'Uploading audio to the cloud${_formatProgress(job)}';
       case TranscriptionJobStatus.processing:
-        return 'Transcribing with Soniox...';
+        return 'Transcribing audio${_formatProgress(job)}';
       case TranscriptionJobStatus.generatingNote:
-        return 'Generating smart notes...';
+        return 'Generating smart notes${_formatProgress(job)}';
       case TranscriptionJobStatus.done:
         return 'Cloud transcription complete';
       case TranscriptionJobStatus.error:
@@ -535,5 +672,17 @@ class _CloudTranscriptionStatus extends StatelessWidget {
       default:
         return scheme.primary;
     }
+  }
+
+  static String _formatProgress(TranscriptionJob job) {
+    final raw = job.progress;
+    if (raw == null) {
+      return '';
+    }
+    final clamped = raw.clamp(0, 100).round();
+    if (clamped <= 0 || clamped >= 100) {
+      return '';
+    }
+    return ' ($clamped%)';
   }
 }
