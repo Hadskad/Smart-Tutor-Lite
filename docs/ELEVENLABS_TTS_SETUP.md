@@ -105,6 +105,8 @@ You can use any voice ID from your ElevenLabs account. To discover available voi
 }
 ```
 
+**Note**: When `sourceType` is `"text"`, `sourceId` should contain the actual text content to convert. When `sourceType` is `"pdf"`, `sourceId` should be a Firebase Storage URL (gs://) or HTTP URL to the PDF file.
+
 **Response**:
 ```json
 {
@@ -128,6 +130,10 @@ You can use any voice ID from your ElevenLabs account. To discover available voi
   "voice": "pNInz6obpgDQGcFmaJgB"
 }
 ```
+
+**Note**: The `sourceId` must be a valid URL to a PDF file. Supported formats:
+- Firebase Storage URLs: `gs://bucket-name/path/to/file.pdf`
+- HTTP/HTTPS URLs: `https://storage.googleapis.com/bucket/path/to/file.pdf`
 
 ### Check Job Status
 

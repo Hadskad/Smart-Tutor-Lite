@@ -77,7 +77,6 @@ Generate a summary from text or PDF.
 ```json
 {
   "text": "Text to summarize...",
-  "maxLength": 200,
   "sourceType": "text"
 }
 ```
@@ -87,7 +86,6 @@ OR
 ```json
 {
   "pdfUrl": "gs://bucket/path/to/document.pdf",
-  "maxLength": 200,
   "sourceType": "pdf"
 }
 ```
@@ -182,20 +180,87 @@ Convert PDF or text to audio.
 ```json
 {
   "sourceType": "pdf",
-  "sourceId": "pdf-id",
-  "voice": "en-US-Standard-B"
+  "sourceId": "gs://bucket/path/to/document.pdf",
+  "voice": "21m00Tcm4TlvDq8ikWAM"
 }
 ```
+
+OR
+
+```json
+{
+  "sourceType": "text",
+  "sourceId": "Text content to convert to speech",
+  "voice": "21m00Tcm4TlvDq8ikWAM"
+}
+```
+
+**Note**: 
+- When `sourceType` is `"text"`, `sourceId` should contain the actual text content.
+- When `sourceType` is `"pdf"`, `sourceId` should be a Firebase Storage URL (gs://) or HTTP URL to the PDF file.
+- `voice` is optional and defaults to `"21m00Tcm4TlvDq8ikWAM"` (Rachel). See [ELEVENLABS_TTS_SETUP.md](ELEVENLABS_TTS_SETUP.md) for available voices.
 
 **Response:**
 ```json
 {
   "id": "uuid-string",
   "sourceType": "pdf",
-  "sourceId": "pdf-id",
-  "audioUrl": "gs://bucket/path/to/audio.mp3",
-  "status": "completed",
+  "sourceId": "gs://bucket/path/to/document.pdf",
+  "audioUrl": "",
+  "storagePath": "",
+  "status": "processing",
+  "voice": "21m00Tcm4TlvDq8ikWAM",
   "createdAt": "2024-01-01T00:00:00Z"
+}
+```
+
+**Note**: The response initially returns with `status: "processing"` and empty `audioUrl`. Use `GET /tts/:id` to check the job status. When complete, `audioUrl` will contain the signed URL to the audio file.
+
+#### GET /tts/:id
+Get TTS job status by ID.
+
+**Response (Processing):**
+```json
+{
+  "id": "uuid-string",
+  "sourceType": "pdf",
+  "sourceId": "gs://bucket/path/to/document.pdf",
+  "audioUrl": "",
+  "storagePath": "",
+  "status": "processing",
+  "voice": "21m00Tcm4TlvDq8ikWAM",
+  "createdAt": "2024-01-01T00:00:00Z"
+}
+```
+
+**Response (Completed):**
+```json
+{
+  "id": "uuid-string",
+  "sourceType": "pdf",
+  "sourceId": "gs://bucket/path/to/document.pdf",
+  "audioUrl": "https://storage.googleapis.com/bucket/tts/uuid-string/audio.mp3",
+  "storagePath": "tts/uuid-string/audio.mp3",
+  "status": "completed",
+  "voice": "21m00Tcm4TlvDq8ikWAM",
+  "createdAt": "2024-01-01T00:00:00Z",
+  "updatedAt": "2024-01-01T00:00:05Z"
+}
+```
+
+**Response (Failed):**
+```json
+{
+  "id": "uuid-string",
+  "sourceType": "pdf",
+  "sourceId": "gs://bucket/path/to/document.pdf",
+  "audioUrl": "",
+  "storagePath": "",
+  "status": "failed",
+  "voice": "21m00Tcm4TlvDq8ikWAM",
+  "errorMessage": "Error details here",
+  "createdAt": "2024-01-01T00:00:00Z",
+  "updatedAt": "2024-01-01T00:00:05Z"
 }
 ```
 

@@ -114,12 +114,12 @@ firebase emulators:start --only functions
 ```
 
 Functions will be available at:
-- `http://localhost:5001/smart-tutor-lite-a66b5/us-central1/api`
+- `http://localhost:5001/smart-tutor-lite-a66b5/europe-west2/api`
 
 ### Test Locally
 
 ```bash
-curl http://localhost:5001/smart-tutor-lite-a66b5/us-central1/api/transcriptions \
+curl http://localhost:5001/smart-tutor-lite-a66b5/europe-west2/api/transcriptions \
   -X POST \
   -F "file=@audio.wav"
 ```
@@ -147,11 +147,11 @@ Environment variables set via `firebase functions:config:set` are automatically 
 After deployment, functions are available at:
 
 ```
-https://us-central1-smart-tutor-lite-a66b5.cloudfunctions.net/api/transcriptions
-https://us-central1-smart-tutor-lite-a66b5.cloudfunctions.net/api/summaries
-https://us-central1-smart-tutor-lite-a66b5.cloudfunctions.net/api/quizzes
-https://us-central1-smart-tutor-lite-a66b5.cloudfunctions.net/api/flashcards
-https://us-central1-smart-tutor-lite-a66b5.cloudfunctions.net/api/tts
+https://europe-west2-smart-tutor-lite-a66b5.cloudfunctions.net/api/transcriptions
+https://europe-west2-smart-tutor-lite-a66b5.cloudfunctions.net/api/summaries
+https://europe-west2-smart-tutor-lite-a66b5.cloudfunctions.net/api/quizzes
+https://europe-west2-smart-tutor-lite-a66b5.cloudfunctions.net/api/flashcards
+https://europe-west2-smart-tutor-lite-a66b5.cloudfunctions.net/api/tts
 ```
 
 ## Firestore Security Rules

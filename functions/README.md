@@ -27,8 +27,8 @@ npm run serve
 ```
 
 Functions will be available at:
-- `http://localhost:5001/smart-tutor-lite-a66b5/us-central1/transcriptions`
-- `http://localhost:5001/smart-tutor-lite-a66b5/us-central1/summaries`
+- `http://localhost:5001/smart-tutor-lite-a66b5/europe-west2/transcriptions`
+- `http://localhost:5001/smart-tutor-lite-a66b5/europe-west2/summaries`
 - etc.
 
 ## Deployment

@@ -43,7 +43,6 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
     try {
       final result = await _summarizeText(
         text: event.text,
-        maxLength: event.maxLength,
       );
 
       result.fold(
@@ -92,7 +91,6 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
     try {
       final result = await _summarizePdf(
         pdfUrl: event.pdfUrl,
-        maxLength: event.maxLength,
       );
 
       result.fold(

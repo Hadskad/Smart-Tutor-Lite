@@ -10,27 +10,23 @@ abstract class SummaryEvent extends Equatable {
 class SummarizeTextEvent extends SummaryEvent {
   const SummarizeTextEvent({
     required this.text,
-    this.maxLength = 200,
   });
 
   final String text;
-  final int maxLength;
 
   @override
-  List<Object?> get props => [text, maxLength];
+  List<Object?> get props => [text];
 }
 
 class SummarizePdfEvent extends SummaryEvent {
   const SummarizePdfEvent({
     required this.pdfUrl,
-    this.maxLength = 200,
   });
 
   final String pdfUrl;
-  final int maxLength;
 
   @override
-  List<Object?> get props => [pdfUrl, maxLength];
+  List<Object?> get props => [pdfUrl];
 }
 
 class LoadSummariesEvent extends SummaryEvent {

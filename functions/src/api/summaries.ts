@@ -16,7 +16,7 @@ app.use(express.json());
 // POST /summaries - Generate summary from text or PDF
 app.post('/', async (req: Request, res: Response) => {
   try {
-    const { text, pdfUrl, maxLength = 200, sourceType } = req.body;
+    const { text, pdfUrl, sourceType } = req.body;
 
     if (!text && !pdfUrl) {
       res.status(400).json({ error: 'Either text or pdfUrl must be provided' });
@@ -50,7 +50,6 @@ app.post('/', async (req: Request, res: Response) => {
     // Generate summary using OpenAI
     const summaryText = await summarizeText({
       text: contentToSummarize,
-      maxLength,
     });
 
     // Save to Firestore
@@ -63,7 +62,6 @@ app.post('/', async (req: Request, res: Response) => {
       metadata: {
         originalLength: contentToSummarize.length,
         summaryLength: summaryText.length,
-        maxLength,
       },
       createdAt: new Date().toISOString(),
     };

@@ -13,8 +13,7 @@ class SummarizePdf {
 
   Future<Either<Failure, Summary>> call({
     required String pdfUrl,
-    int maxLength = 200,
   }) async {
-    return _repository.summarizePdf(pdfUrl: pdfUrl, maxLength: maxLength);
+    return _repository.summarizePdf(pdfUrl: pdfUrl);
   }
 }

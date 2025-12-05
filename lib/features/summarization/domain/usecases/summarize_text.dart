@@ -13,8 +13,7 @@ class SummarizeText {
 
   Future<Either<Failure, Summary>> call({
     required String text,
-    int maxLength = 200,
   }) async {
-    return _repository.summarizeText(text: text, maxLength: maxLength);
+    return _repository.summarizeText(text: text);
   }
 }

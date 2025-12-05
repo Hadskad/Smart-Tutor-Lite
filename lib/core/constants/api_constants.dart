@@ -13,7 +13,6 @@ class ApiConstants {
   static const String flashcards = '/flashcards';
 
   // Query parameter keys
-  static const String maxLength = 'max_length';
   static const String useGpu = 'use_gpu';
   static const String pdfUrl = 'pdf_url';
 }

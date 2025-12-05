@@ -266,10 +266,10 @@ smart_tutor_lite/
 ## Features Status
 
 - ✅ **Transcription**: Fully implemented with on-device Whisper
-- ✅ **Summarization**: Domain and data layers complete, presentation in progress
-- ⏳ **Quiz Generation**: In progress
-- ⏳ **Text-to-Speech**: In progress
-- ⏳ **Study Mode**: In progress
+- ✅ **Summarization**: Fully implemented with offline queue support
+- ✅ **Quiz Generation**: Fully implemented with offline queue support
+- ✅ **Text-to-Speech**: Fully implemented with offline queue support
+- ✅ **Study Mode**: Fully implemented with flashcards and progress tracking
 
 ## Offline-First Architecture
 

@@ -71,7 +71,6 @@ class SummaryRepositoryImpl implements SummaryRepository {
   @override
   Future<Either<Failure, Summary>> summarizeText({
     required String text,
-    int maxLength = 200,
   }) async {
     try {
       // Check if online before attempting remote call
@@ -82,7 +81,6 @@ class SummaryRepositoryImpl implements SummaryRepository {
           id: _uuid.v4(),
           sourceType: 'text',
           text: text,
-          maxLength: maxLength,
           createdAt: DateTime.now(),
         );
         await _queueDataSource.addToQueue(queueItem);
@@ -98,7 +96,6 @@ class SummaryRepositoryImpl implements SummaryRepository {
       // Call remote API
       final remoteModel = await _remoteDataSource.summarizeText(
         text: text,
-        maxLength: maxLength,
       );
 
       // Cache locally
@@ -120,7 +117,6 @@ class SummaryRepositoryImpl implements SummaryRepository {
   @override
   Future<Either<Failure, Summary>> summarizePdf({
     required String pdfUrl,
-    int maxLength = 200,
   }) async {
     try {
       // Check if online before attempting remote call
@@ -131,7 +127,6 @@ class SummaryRepositoryImpl implements SummaryRepository {
           id: _uuid.v4(),
           sourceType: 'pdf',
           pdfUrl: pdfUrl,
-          maxLength: maxLength,
           createdAt: DateTime.now(),
         );
         await _queueDataSource.addToQueue(queueItem);
@@ -147,7 +142,6 @@ class SummaryRepositoryImpl implements SummaryRepository {
       // Call remote API
       final remoteModel = await _remoteDataSource.summarizePdf(
         pdfUrl: pdfUrl,
-        maxLength: maxLength,
       );
 
       // Cache locally
@@ -265,12 +259,10 @@ class SummaryRepositoryImpl implements SummaryRepository {
           if (item.sourceType == 'text' && item.text != null) {
             result = await _remoteDataSource.summarizeText(
               text: item.text!,
-              maxLength: item.maxLength,
             );
           } else if (item.sourceType == 'pdf' && item.pdfUrl != null) {
             result = await _remoteDataSource.summarizePdf(
               pdfUrl: item.pdfUrl!,
-              maxLength: item.maxLength,
             );
           } else {
             await _queueDataSource.markAsFailed(

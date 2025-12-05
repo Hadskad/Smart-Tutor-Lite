@@ -8,12 +8,10 @@ import '../models/summary_model.dart';
 abstract class SummaryRemoteDataSource {
   Future<SummaryModel> summarizeText({
     required String text,
-    int maxLength = 200,
   });
 
   Future<SummaryModel> summarizePdf({
     required String pdfUrl,
-    int maxLength = 200,
   });
 
   Future<SummaryModel> getSummary(String id);
@@ -28,14 +26,12 @@ class SummaryRemoteDataSourceImpl implements SummaryRemoteDataSource {
   @override
   Future<SummaryModel> summarizeText({
     required String text,
-    int maxLength = 200,
   }) async {
     try {
       final response = await _apiClient.post<Map<String, dynamic>>(
         ApiConstants.summarize,
         data: {
           'text': text,
-          'maxLength': maxLength,
           'sourceType': 'text',
         },
         parser: (data) => Map<String, dynamic>.from(data as Map),
@@ -52,14 +48,12 @@ class SummaryRemoteDataSourceImpl implements SummaryRemoteDataSource {
   @override
   Future<SummaryModel> summarizePdf({
     required String pdfUrl,
-    int maxLength = 200,
   }) async {
     try {
       final response = await _apiClient.post<Map<String, dynamic>>(
         ApiConstants.summarize,
         data: {
           'pdfUrl': pdfUrl,
-          'maxLength': maxLength,
           'sourceType': 'pdf',
         },
         parser: (data) => Map<String, dynamic>.from(data as Map),

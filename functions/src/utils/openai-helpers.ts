@@ -4,7 +4,6 @@ const GPT_MODEL = 'gpt-4.1-mini';
 
 export interface SummarizeOptions {
   text: string;
-  maxLength?: number;
 }
 
 export interface GenerateQuizOptions {
