@@ -64,10 +64,11 @@ class _CustomCircularNavBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(40),
-            color:  Color(0xFFDFF4F9),
+            color: Color(0xFFDFF4F9),
             boxShadow: [
               BoxShadow(
-                color: const Color.fromARGB(255, 89, 96, 192).withValues(alpha: 0.05),
+                color: const Color.fromARGB(255, 89, 96, 192)
+                    .withValues(alpha: 0.05),
                 blurRadius: 10,
                 offset: const Offset(0, -2),
               ),
