@@ -6,16 +6,45 @@ import { db } from '../config/firebase-admin';
  */
 export async function saveTranscription(data: {
   id: string;
-  text: string;
-  audioPath: string;
-  durationMs: number;
-  timestamp: string;
+  text?: string;
+  audioPath?: string;
+  storagePath?: string;
+  durationMs?: number;
+  timestamp?: string;
   confidence?: number;
   metadata?: Record<string, any>;
+  status?: 'completed' | 'failed' | 'processing';
+  errorCode?: string;
+  errorMessage?: string;
+  canRetry?: boolean;
+  retryCount?: number;
+  lastRetryAt?: string;
 }): Promise<void> {
   await db.collection('transcriptions').doc(data.id).set({
     ...data,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Update transcription status and retry fields
+ */
+export async function updateTranscriptionStatus(
+  id: string,
+  updates: {
+    status?: 'completed' | 'failed' | 'processing';
+    errorCode?: string;
+    errorMessage?: string;
+    canRetry?: boolean;
+    retryCount?: number;
+    lastRetryAt?: string;
+    text?: string;
+    confidence?: number;
+  },
+): Promise<void> {
+  await db.collection('transcriptions').doc(id).update({
+    ...updates,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 }
 

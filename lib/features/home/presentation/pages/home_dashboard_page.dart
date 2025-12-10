@@ -154,7 +154,7 @@ class HomeDashboardPage extends StatelessWidget {
       childAspectRatio: 0.9,
       children: [
         _HomeFeatureCard(
-          title: 'Smart record',
+          title: 'Note Taker',
           subtitle: 'Lectures->notes',
           icon: Icons.mic_none_outlined,
           onTap: () {
@@ -258,7 +258,7 @@ class _HomeFeatureCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               subtitle,
               style: const TextStyle(

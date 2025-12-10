@@ -1,7 +1,8 @@
 import { storage } from '../config/firebase-admin';
 
-const BUCKET_NAME =
-  process.env.FIREBASE_STORAGE_BUCKET ?? 'smart-tutor-lite-a66b5.appspot.com';
+// Use default bucket - automatically configured by Firebase Admin SDK
+// This will use the project's default storage bucket
+const getBucket = () => storage.bucket();
 
 interface DownloadOptions {
   maxBytes?: number;
@@ -16,7 +17,7 @@ export async function uploadFile(
   contentType: string,
   expiresInSeconds: number = 24 * 3600,
 ): Promise<{ storagePath: string; signedUrl: string }> {
-  const bucket = storage.bucket(BUCKET_NAME);
+  const bucket = getBucket();
   const file = bucket.file(path);
 
   await file.save(buffer, {
@@ -40,24 +41,119 @@ export async function downloadStorageObject(
   storagePath: string,
   destination: string,
 ): Promise<void> {
-  const bucket = storage.bucket(BUCKET_NAME);
+  const bucket = getBucket();
   await bucket.file(storagePath).download({ destination });
+}
+
+/**
+ * Check if an error is retryable (network errors, 5xx server errors, timeouts)
+ */
+function isRetryableError(error: any): boolean {
+  // Network errors
+  if (error.code === 'ECONNRESET' || 
+      error.code === 'ETIMEDOUT' || 
+      error.code === 'ENOTFOUND' || 
+      error.code === 'ECONNREFUSED' ||
+      error.code === 'EAI_AGAIN' ||
+      error.message?.includes('timeout') ||
+      error.message?.includes('ECONNRESET') ||
+      error.message?.includes('ETIMEDOUT')) {
+    return true;
+  }
+
+  // HTTP 5xx server errors (retryable)
+  const httpStatus = error.code || error.status || error.statusCode;
+  if (typeof httpStatus === 'number' && httpStatus >= 500 && httpStatus < 600) {
+    return true;
+  }
+
+  // Non-retryable errors
+  if (httpStatus === 400 || httpStatus === 403 || httpStatus === 404) {
+    return false;
+  }
+
+  // For unknown errors, don't retry (safer)
+  return false;
+}
+
+/**
+ * Download storage object with retry logic and exponential backoff
+ * Max 3 retries with delays: 1s, 2s, 4s
+ * Only retries on network errors, 5xx server errors, and timeouts
+ */
+export async function downloadStorageObjectWithRetry(
+  storagePath: string,
+  destination: string,
+  maxRetries: number = 3,
+): Promise<void> {
+  const retryDelays = [1000, 2000, 4000]; // 1s, 2s, 4s
+
+  let lastError: any = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await downloadStorageObject(storagePath, destination);
+      // Success - return immediately
+      return;
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on last attempt
+      if (attempt >= maxRetries) {
+        break;
+      }
+
+      // Check if error is retryable
+      if (!isRetryableError(error)) {
+        // Non-retryable error - throw immediately
+        throw error;
+      }
+
+      // Wait before retrying (exponential backoff)
+      const delay = retryDelays[attempt] || retryDelays[retryDelays.length - 1];
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  // All retries exhausted - throw last error
+  throw lastError;
 }
 
 /**
  * Get signed URL for file (for private files)
  */
 export async function getSignedUrl(
-  path: string,
-  expiresIn: number = 3600
+  storagePath: string,
+  expirySeconds?: number
 ): Promise<string> {
-  const bucket = storage.bucket(BUCKET_NAME);
-  const file = bucket.file(path);
+  const bucket = getBucket();
+  const file = bucket.file(storagePath);
 
+  // Verify file exists before generating URL
+  const [exists] = await file.exists();
+  if (!exists) {
+    throw new Error(`File does not exist at path: ${storagePath}`);
+  }
+
+  // Verify file metadata
+  const [metadata] = await file.getMetadata();
+  if (!metadata) {
+    throw new Error(`Cannot access file metadata at path: ${storagePath}`);
+  }
+
+  const expiry = expirySeconds ?? 18000; // Default 5 hours (18000 seconds)
+
+  // Generate signed URL with proper configuration
   const [url] = await file.getSignedUrl({
     action: 'read',
-    expires: Date.now() + expiresIn * 1000,
+    expires: Date.now() + expiry * 1000,
+    version: 'v4', // Explicitly use v4 signing
   });
+
+  // Validate URL format
+  if (!url || !url.startsWith('https://')) {
+    throw new Error(`Invalid signed URL format generated for: ${storagePath}`);
+  }
 
   return url;
 }
@@ -66,7 +162,7 @@ export async function getSignedUrl(
  * Delete file from Firebase Storage
  */
 export async function deleteFile(path: string): Promise<void> {
-  const bucket = storage.bucket(BUCKET_NAME);
+  const bucket = getBucket();
   const file = bucket.file(path);
 
   await file.delete().catch((error) => {
@@ -143,5 +239,30 @@ export async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
   const pdfParse = require('pdf-parse');
   const data = await pdfParse(pdfBuffer);
   return data.text;
+}
+
+// Alternative function to get public URL
+export async function getPublicUrl(
+  storagePath: string,
+  makePublic: boolean = false
+): Promise<string> {
+  const bucket = getBucket();
+  const file = bucket.file(storagePath);
+
+  // Verify file exists
+  const [exists] = await file.exists();
+  if (!exists) {
+    throw new Error(`File does not exist at path: ${storagePath}`);
+  }
+
+  // Option 1: Make file public temporarily
+  if (makePublic) {
+    await file.makePublic();
+    // Get public URL
+    return `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+  }
+
+  // Option 2: Use signed URL (preferred)
+  return getSignedUrl(storagePath);
 }
 

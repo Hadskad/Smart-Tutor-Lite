@@ -182,15 +182,23 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i38.SummaryQueueLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i756.WhisperLifecycleObserver>(
         () => _i756.WhisperLifecycleObserver(gh<_i687.WhisperFfi>()));
-    gh.lazySingleton<_i440.NetworkInfo>(
-        () => _i440.NetworkInfoImpl(gh<_i895.Connectivity>()));
     gh.lazySingleton<_i820.WhisperLocalDataSource>(
         () => _i820.WhisperLocalDataSourceImpl(gh<_i687.WhisperFfi>()));
+    gh.lazySingleton<_i361.Dio>(
+        () => externalModule.dio(gh<_i496.AppLogger>()));
+    gh.lazySingleton<_i440.NetworkInfo>(() => _i440.NetworkInfoImpl(
+          gh<_i895.Connectivity>(),
+          gh<_i361.Dio>(),
+        ));
     gh.lazySingleton<_i80.TranscriptionJobRepository>(
         () => _i438.TranscriptionJobRepositoryImpl(
               gh<_i1047.TranscriptionJobRemoteDataSource>(),
               gh<_i440.NetworkInfo>(),
             ));
+    gh.lazySingleton<_i114.ApiClient>(() => _i114.ApiClient(
+          gh<_i361.Dio>(),
+          gh<_i440.NetworkInfo>(),
+        ));
     gh.lazySingleton<_i794.CancelTranscriptionJob>(() =>
         _i794.CancelTranscriptionJob(gh<_i80.TranscriptionJobRepository>()));
     gh.lazySingleton<_i925.CreateTranscriptionJob>(() =>
@@ -202,12 +210,6 @@ extension GetItInjectableX on _i174.GetIt {
             gh<_i80.TranscriptionJobRepository>()));
     gh.lazySingleton<_i1047.WatchTranscriptionJob>(() =>
         _i1047.WatchTranscriptionJob(gh<_i80.TranscriptionJobRepository>()));
-    gh.lazySingleton<_i361.Dio>(
-        () => externalModule.dio(gh<_i496.AppLogger>()));
-    gh.lazySingleton<_i114.ApiClient>(() => _i114.ApiClient(
-          gh<_i361.Dio>(),
-          gh<_i440.NetworkInfo>(),
-        ));
     gh.lazySingleton<_i539.TtsRemoteDataSource>(
         () => _i539.TtsRemoteDataSourceImpl(gh<_i114.ApiClient>()));
     gh.lazySingleton<_i82.SummaryRemoteDataSource>(

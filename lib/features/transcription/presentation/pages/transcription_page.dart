@@ -418,7 +418,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
       return;
     }
     _isFallbackDialogVisible = true;
-    final bloc = context.read<TranscriptionBloc>();
+    final bloc = _bloc;
 
     await showDialog<void>(
       context: context,
@@ -632,11 +632,13 @@ class _CloudTranscriptionStatus extends StatelessWidget {
         return 'Preparing upload...';
       case TranscriptionJobStatus.uploading:
         return 'Uploading audio to the cloud${_formatProgress(job)}';
+      case TranscriptionJobStatus.uploaded:
+        return 'Audio uploaded, processing...';
       case TranscriptionJobStatus.processing:
         return 'Transcribing audio${_formatProgress(job)}';
       case TranscriptionJobStatus.generatingNote:
         return 'Generating smart notes${_formatProgress(job)}';
-      case TranscriptionJobStatus.done:
+      case TranscriptionJobStatus.completed:
         return 'Cloud transcription complete';
       case TranscriptionJobStatus.error:
         return job.errorMessage ?? 'Cloud transcription failed';
@@ -648,11 +650,13 @@ class _CloudTranscriptionStatus extends StatelessWidget {
       case TranscriptionJobStatus.pending:
       case TranscriptionJobStatus.uploading:
         return Icons.cloud_upload_outlined;
+      case TranscriptionJobStatus.uploaded:
+        return Icons.cloud_upload_outlined;
       case TranscriptionJobStatus.processing:
         return Icons.cloud_sync_outlined;
       case TranscriptionJobStatus.generatingNote:
         return Icons.auto_stories_outlined;
-      case TranscriptionJobStatus.done:
+      case TranscriptionJobStatus.completed:
         return Icons.cloud_done_outlined;
       case TranscriptionJobStatus.error:
         return Icons.cloud_off_outlined;
@@ -667,7 +671,7 @@ class _CloudTranscriptionStatus extends StatelessWidget {
     switch (status) {
       case TranscriptionJobStatus.error:
         return scheme.error;
-      case TranscriptionJobStatus.done:
+      case TranscriptionJobStatus.completed:
         return scheme.secondary;
       default:
         return scheme.primary;

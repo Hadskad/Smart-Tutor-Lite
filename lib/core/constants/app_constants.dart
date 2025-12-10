@@ -11,4 +11,9 @@ class AppConstants {
 
   // Performance monitoring
   static const String performanceChannel = 'smarttutor_performance';
+
+  // Network speed test configuration
+  static const Duration speedTestInterval = Duration(seconds: 25);
+  static const double minStrongSpeedKbps = 200.0;
+  static const Duration speedTestTimeout = Duration(seconds: 10);
 }

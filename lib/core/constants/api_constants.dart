@@ -15,4 +15,8 @@ class ApiConstants {
   // Query parameter keys
   static const String useGpu = 'use_gpu';
   static const String pdfUrl = 'pdf_url';
+
+  // Network speed test file URL (to be set after Firebase Storage upload)
+  static const String speedTestFileUrl =
+      'https://firebasestorage.googleapis.com/v0/b/smart-tutor-lite-a66b5.firebasestorage.app/o/speedtest%2Ftest.json?alt=media&token=697264f6-04ed-4823-84d0-c87a8692e25e';
 }

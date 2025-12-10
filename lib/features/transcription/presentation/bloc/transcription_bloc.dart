@@ -9,7 +9,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
 
+import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/network/network_info.dart';
@@ -41,7 +44,8 @@ const _kAmplitudeSampleInterval = Duration(milliseconds: 500);
 enum TranscriptionExecutionMode { online, offline }
 
 @injectable
-class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
+class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
+    with WidgetsBindingObserver {
   TranscriptionBloc(
     this._transcribeAudio,
     this._performanceBridge,
@@ -70,6 +74,9 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     on<RetryCloudFromFallback>(_onRetryCloudFromFallback);
 
     add(const LoadTranscriptionPreferences());
+
+    // Add lifecycle observer
+    WidgetsBinding.instance.addObserver(this);
   }
 
   final usecase.TranscribeAudio _transcribeAudio;
@@ -102,6 +109,11 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
   Duration? _pendingFallbackDuration;
   int? _pendingFallbackSizeBytes;
   String? _lastCloudFailureMessage;
+  double? _lastMeasuredSpeedKbps;
+  Timer? _speedTestTimer;
+  bool _isSpeedTestRunning = false;
+  DateTime? _lastSpeedUpdate;
+  bool _shouldMonitorSpeed = false; // Track if monitoring should be active
 
   Future<void> _onLoad(
     LoadTranscriptions event,
@@ -318,8 +330,108 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
       : AppConstants.whisperDefaultModel;
 
   bool _isStrongConnection(ConnectivityResult result) {
+    // Use measured speed if available and not expired
+    if (_lastMeasuredSpeedKbps != null && !isSpeedDataExpired) {
+      final isStrong =
+          _lastMeasuredSpeedKbps! >= AppConstants.minStrongSpeedKbps;
+      debugPrint(
+          '[SpeedTest] Using measured speed: ${_lastMeasuredSpeedKbps!.toStringAsFixed(2)} kbps (strong: $isStrong)');
+      return isStrong;
+    }
+    // Fallback to connection type if speed hasn't been measured yet or is expired
+    final fallbackReason = _lastMeasuredSpeedKbps == null
+        ? 'no speed data'
+        : 'speed data expired (last update: ${_lastSpeedUpdate?.toString() ?? "never"})';
+    debugPrint(
+        '[SpeedTest] Fallback to connection type: $fallbackReason (connection: $result)');
     return result == ConnectivityResult.wifi ||
         result == ConnectivityResult.ethernet;
+  }
+
+  bool get isSpeedDataExpired {
+    if (_lastSpeedUpdate == null) {
+      return true;
+    }
+    return DateTime.now().difference(_lastSpeedUpdate!) > Duration(minutes: 5);
+  }
+
+  void _startSpeedTestMonitoring() {
+    _stopSpeedTestMonitoring(); // Ensure no duplicate timers
+    if (ApiConstants.speedTestFileUrl.isEmpty) {
+      // Skip if test file URL is not configured yet
+      debugPrint(
+          '[SpeedTest] Monitoring skipped: test file URL not configured');
+      return;
+    }
+    _shouldMonitorSpeed = true;
+    _speedTestTimer = Timer.periodic(
+      AppConstants.speedTestInterval,
+      (_) {
+        debugPrint('[SpeedTest] Timer tick: starting speed test');
+        _runSpeedTest();
+      },
+    );
+    debugPrint('[SpeedTest] Monitoring started');
+    // Run initial test immediately
+    _runSpeedTest();
+  }
+
+  void _stopSpeedTestMonitoring() {
+    _speedTestTimer?.cancel();
+    _speedTestTimer = null;
+    // Reset flag in case a test is currently running
+    _isSpeedTestRunning = false;
+    _shouldMonitorSpeed = false;
+    debugPrint('[SpeedTest] Monitoring stopped');
+  }
+
+  Future<void> _runSpeedTest() async {
+    if (ApiConstants.speedTestFileUrl.isEmpty) {
+      return;
+    }
+    // Prevent concurrent speed tests
+    if (_isSpeedTestRunning) {
+      debugPrint('[SpeedTest] Skipped: test already running');
+      return;
+    }
+    _isSpeedTestRunning = true;
+    try {
+      final hasNetwork = await _networkInfo.isConnected;
+      if (!hasNetwork) {
+        debugPrint('[SpeedTest] Skipped: no network connection');
+        return;
+      }
+      // Add timeout wrapper around entire call as defense-in-depth
+      // Dio timeout + 2s buffer to ensure future completes even if Dio timeout fails
+      final speed = await _networkInfo
+          .measureDownloadSpeedKbps(
+        testFileUrl: ApiConstants.speedTestFileUrl,
+        timeout: AppConstants.speedTestTimeout,
+      )
+          .timeout(
+        AppConstants.speedTestTimeout + const Duration(seconds: 2),
+        onTimeout: () {
+          debugPrint('[SpeedTest] Request timeout');
+          return null;
+        },
+      );
+      if (speed != null) {
+        _lastMeasuredSpeedKbps = speed;
+        _lastSpeedUpdate = DateTime.now();
+        debugPrint(
+            '[SpeedTest] Measured speed: ${speed.toStringAsFixed(2)} kbps');
+      } else {
+        debugPrint(
+            '[SpeedTest] Request failed: returned null (keeping last known speed: ${_lastMeasuredSpeedKbps?.toStringAsFixed(2) ?? "none"} kbps)');
+      }
+      // If speed is null, don't update _lastMeasuredSpeedKbps (keep last known value)
+    } catch (e) {
+      debugPrint('[SpeedTest] Request error: $e');
+      // Ignore errors, keep last known speed
+    } finally {
+      // Always reset flag, even on early return or error
+      _isSpeedTestRunning = false;
+    }
   }
 
   bool _isLargeRecording(Duration duration, int fileSizeBytes) {
@@ -444,6 +556,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
       _silenceTicks = 0;
       _startRecordingTicker();
       _startMonitoringInputLevels();
+      _startSpeedTestMonitoring();
       emit(
         TranscriptionRecording(
           startedAt: _recordingStartedAt!,
@@ -457,6 +570,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     } catch (error) {
       _stopRecordingTicker();
       _stopMonitoringInputLevels();
+      _stopSpeedTestMonitoring();
       emit(
         TranscriptionError(
           message: error.toString(),
@@ -541,16 +655,6 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
         fileSizeBytes: fileSizeBytes,
       );
 
-      if (_plannedExecutionMode == TranscriptionExecutionMode.online &&
-          !_isStrongConnection(_lastConnectionType) &&
-          _isLargeRecording(duration, fileSizeBytes)) {
-        _plannedExecutionMode = TranscriptionExecutionMode.offline;
-        _emitNotice(
-          emit,
-          'Connection looks weak for this long recording. Using on-device mode instead.',
-          severity: TranscriptionNoticeSeverity.warning,
-        );
-      }
 
       final useOnline =
           _plannedExecutionMode == TranscriptionExecutionMode.online;
@@ -588,6 +692,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     } finally {
       _stopRecordingTicker();
       _stopMonitoringInputLevels();
+      _stopSpeedTestMonitoring();
       _recordingStartedAt = null;
       _currentRecordingPath = null;
     }
@@ -790,7 +895,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
     _activeCloudJobId = null;
     await _cloudJobSubscription?.cancel();
     _cloudJobSubscription = null;
-    if (job.status == TranscriptionJobStatus.done && job.transcriptId != null) {
+    if (job.status == TranscriptionJobStatus.completed &&
+        job.transcriptId != null) {
       final result =
           await _transcriptionRepository.getTranscription(job.transcriptId!);
       await result.fold(
@@ -957,14 +1063,34 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused) {
+      // Stop speed tests when app goes to background
+      debugPrint('[SpeedTest] App paused: stopping monitoring');
+      _stopSpeedTestMonitoring();
+    } else if (state == AppLifecycleState.resumed) {
+      // Resume speed tests if we should be monitoring (recording is active)
+      debugPrint('[SpeedTest] App resumed: shouldMonitor=$_shouldMonitorSpeed');
+      if (_shouldMonitorSpeed) {
+        debugPrint('[SpeedTest] Resuming monitoring');
+        _startSpeedTestMonitoring();
+      }
+    }
+  }
+
+  @override
   Future<void> close() async {
     _stopRecordingTicker();
     _stopMonitoringInputLevels();
+    _stopSpeedTestMonitoring();
     await _cloudJobSubscription?.cancel();
     if (await _recorder.isRecording()) {
       await _recorder.stop();
     }
     await _recorder.dispose();
+    // Remove lifecycle observer
+    WidgetsBinding.instance.removeObserver(this);
     return super.close();
   }
 }

@@ -65,8 +65,9 @@ class TranscriptionJobRemoteDataSourceImpl
       'metadata': request.metadata,
       'progress': 0.0,
       'canRetry': false,
-       'noteStatus': 'pending',
-       'noteCanRetry': false,
+      'noteStatus': 'pending',
+      'noteCanRetry': false,
+      'workerStatus': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -86,10 +87,27 @@ class TranscriptionJobRemoteDataSourceImpl
       },
     );
 
-    await _storage.ref(storagePath).putFile(file, fileMetadata);
+    try {
+      await _storage.ref(storagePath).putFile(file, fileMetadata);
+    } catch (storageError) {
+      // Rollback: Mark job as error if storage upload fails
+      await docRef.update({
+        'status': TranscriptionJobStatus.error.label,
+        'errorCode': 'storage_upload_failed',
+        'errorMessage': 'Failed to upload audio file to storage',
+        'canRetry': true,
+        'workerStatus': 'failed',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      // Re-throw to be handled by repository layer
+      throw ServerFailure(
+        message: 'Failed to upload audio file',
+        cause: storageError,
+      );
+    }
 
     await docRef.update({
-      'status': TranscriptionJobStatus.processing.label,
+      'status': TranscriptionJobStatus.uploaded.label,
       'uploadCompletedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'progress': 15.0,
@@ -123,7 +141,7 @@ class TranscriptionJobRemoteDataSourceImpl
   @override
   Future<void> requestRetry(String jobId, {String? reason}) {
     return _jobsCollection.doc(jobId).update({
-      'status': TranscriptionJobStatus.processing.label,
+      'status': TranscriptionJobStatus.uploaded.label,
       'retryRequestedAt': FieldValue.serverTimestamp(),
       'retryReason': reason,
       'canRetry': false,
@@ -161,4 +179,3 @@ class TranscriptionJobRemoteDataSourceImpl
     }
   }
 }
-

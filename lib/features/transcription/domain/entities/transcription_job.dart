@@ -3,9 +3,10 @@ import 'package:equatable/equatable.dart';
 enum TranscriptionJobStatus {
   pending('pending'),
   uploading('uploading'),
+  uploaded('uploaded'),
   processing('processing'),
   generatingNote('generating_note'),
-  done('done'),
+  completed('completed'),
   error('error'),
   ;
 
@@ -70,7 +71,7 @@ class TranscriptionJob extends Equatable {
   final bool noteCanRetry;
 
   bool get isTerminal => switch (status) {
-        TranscriptionJobStatus.done ||
+        TranscriptionJobStatus.completed ||
         TranscriptionJobStatus.error =>
           true,
         _ => false,

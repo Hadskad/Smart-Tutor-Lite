@@ -7,10 +7,12 @@ import { promises as fs } from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
-import { db } from '../config/firebase-admin';
+
 import {
-  downloadStorageObject,
+  downloadStorageObjectWithRetry,
   getSignedUrl,
+  uploadFile,
+  deleteFile,
 } from '../utils/storage-helpers';
 import {
   getTranscription,
@@ -27,13 +29,13 @@ import { generateStudyNotes } from '../utils/openai-helpers';
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const REGION = 'europe-west2';
-const JOB_COLLECTION = 'transcription_jobs';
-const MAX_JOBS_PER_RUN = 2;
+
+
 const CHUNK_SECONDS = 360; // 6 minutes
-const SONIOX_TIMEOUT_PER_CHUNK_MS = 120_000;
+const SONIOX_TIMEOUT_PER_CHUNK_MS = 600_000; // 10 minutes (was 120_000 = 2 minutes)
 const CHUNK_CONCURRENCY = 3;
-const BASE_JOB_TIMEOUT_MS = 180_000;
-const PROCESSABLE_STATUSES = ['processing', 'generating_note'];
+const BASE_JOB_TIMEOUT_MS = 600_000;
+
 
 const NOTE_STATUS = {
   pending: 'pending',
@@ -42,22 +44,131 @@ const NOTE_STATUS = {
   error: 'error',
 } as const;
 
-export const processTranscriptionJobs = functions
+export const processTranscriptionJob = functions
   .region(REGION)
-  .pubsub.schedule('every 2 minutes')
-  .onRun(async () => {
-    const snapshot = await db
-      .collection(JOB_COLLECTION)
-      .where('status', 'in', PROCESSABLE_STATUSES)
-      .limit(MAX_JOBS_PER_RUN)
-      .get();
+  .runWith({
+    timeoutSeconds: 540,
+    memory: '512MB',
+  })
+  .firestore.document('transcription_jobs/{jobId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data() as JobData;
+    const after = change.after.data() as JobData;
+    const jobId = context.params.jobId;
 
-    if (snapshot.empty) {
-      return;
+    // Only process when status changes to 'uploaded'
+    if (before.status !== 'uploaded' && after.status === 'uploaded') {
+      // Idempotency: Skip if already processing or failed
+      if (
+        after.workerStatus === 'running' ||
+        after.workerStatus === 'failed'
+      ) {
+        functions.logger.debug('Skipping job - already processing or failed', {
+          jobId,
+          workerStatus: after.workerStatus,
+        });
+        return;
+      }
+
+      // Verify audio is uploaded
+      if (!after.audioStoragePath) {
+        await markJobError(
+          change.after,
+          'bad_audio',
+          'Audio storage path is missing.',
+          false, // canRetry = false for missing audio
+        );
+        return;
+      }
+
+      try {
+        await processJob(change.after);
+      } catch (error) {
+        // Catch any errors that weren't handled by processJob
+        functions.logger.error('processTranscriptionJob trigger failed', {
+          jobId,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        
+        // Mark job as error if processJob didn't already do so
+        const currentData = (await change.after.ref.get()).data() as JobData;
+        if (currentData.status === 'uploaded' && currentData.workerStatus !== 'failed') {
+          const normalized = normalizeError(error);
+          await markJobError(
+            change.after,
+            normalized.code,
+            normalized.message,
+            normalized.canRetry,
+          );
+        }
+      }
     }
+  });
 
-    for (const doc of snapshot.docs) {
-      await processJob(doc);
+export const processNoteGeneration = functions
+  .region(REGION)
+  .runWith({
+    timeoutSeconds: 540,
+    memory: '512MB',
+  })
+  .firestore.document('transcription_jobs/{jobId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data() as JobData;
+    const after = change.after.data() as JobData;
+    const jobId = context.params.jobId;
+
+    // Trigger when status changes to 'generating_note' and transcriptId exists
+    if (
+      before.status !== 'generating_note' &&
+      after.status === 'generating_note' &&
+      after.transcriptId
+    ) {
+      // Idempotency check
+      if (after.workerStatus === 'running' || after.noteStatus === 'ready') {
+        functions.logger.debug('Skipping note generation - already processing or ready', {
+          jobId,
+        });
+        return;
+      }
+
+      const transcriptText = await loadStoredTranscript(after.transcriptId);
+      if (!transcriptText) {
+        await markJobError(
+          change.after,
+          'bad_audio',
+          'Transcription not found.',
+        );
+        return;
+      }
+
+      try {
+        await runNoteStage(change.after, after.transcriptId, transcriptText);
+      } catch (error) {
+        // Catch any errors that weren't handled by runNoteStage
+        functions.logger.error('processNoteGeneration trigger failed', {
+          jobId,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+
+        // Mark job as error if runNoteStage didn't already do so
+        const currentData = (await change.after.ref.get()).data() as JobData;
+        if (
+          currentData.status === 'generating_note' &&
+          currentData.noteStatus !== 'error'
+        ) {
+          const normalized = normalizeError(error);
+          await change.after.ref.update({
+            status: 'completed',
+            noteStatus: NOTE_STATUS.error,
+            noteError: normalized.message,
+            noteCanRetry: normalized.canRetry,
+            workerStatus: 'note_failed',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      }
     }
   });
 
@@ -73,6 +184,11 @@ type JobData = {
   transcriptId?: string;
   noteStatus?: string;
   noteId?: string;
+  canRetry?: boolean;
+  retryCount?: number;
+  retryScheduledAt?: admin.firestore.Timestamp | admin.firestore.FieldValue | null;
+  lastRetryAt?: admin.firestore.Timestamp | admin.firestore.FieldValue;
+  maxRetries?: number;
 };
 
 async function processJob(
@@ -85,12 +201,55 @@ async function processJob(
   }
 
   const jobStatus = (data.status as string) ?? 'processing';
-  if (jobStatus === 'processing' && !data.audioStoragePath) {
+  
+  // Handle note-only retries (when status is generating_note and transcriptId exists)
+  if (jobStatus === 'generating_note' && data.transcriptId) {
+    await doc.ref.update({
+      workerStatus: 'running',
+      workerId: uuidv4(),
+      workerStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    try {
+      const transcriptText = await loadStoredTranscript(data.transcriptId);
+      if (!transcriptText) {
+        throw new Error('Stored transcription text is unavailable.');
+      }
+      await runNoteStage(doc, data.transcriptId, transcriptText);
+    } catch (error) {
+      const normalized = normalizeError(error);
+      await doc.ref.update({
+        status: 'error',
+        workerStatus: 'failed',
+        errorCode: normalized.code,
+        errorMessage: normalized.message,
+        canRetry: normalized.canRetry,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      const jobData = doc.data() as JobData;
+      functions.logger.error('Note generation retry failed', {
+        jobId: doc.id,
+        transcriptId: data.transcriptId,
+        errorCode: normalized.code,
+        errorMessage: normalized.message,
+        canRetry: normalized.canRetry,
+        retryCount: jobData.retryCount ?? 0,
+      });
+    }
+    return;
+  }
+
+  if (
+    (jobStatus === 'processing' || jobStatus === 'uploaded') &&
+    !data.audioStoragePath
+  ) {
     await markJobError(doc, 'bad_audio', 'Audio storage path is missing.');
     return;
   }
 
   await doc.ref.update({
+    status: 'processing',
     workerStatus: 'running',
     workerId: uuidv4(),
     workerStartedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -103,7 +262,7 @@ async function processJob(
     let transcriptId = data.transcriptId ?? null;
     let transcriptText: string | null = null;
 
-    if (jobStatus === 'processing') {
+    if (jobStatus === 'processing' || jobStatus === 'uploaded') {
       tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `job_${doc.id}_`));
       const sourcePath = path.join(
         tempDir,
@@ -139,9 +298,15 @@ async function processJob(
       canRetry: normalized.canRetry,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    const jobData = doc.data() as JobData;
     functions.logger.error('Transcription job failed', {
       jobId: doc.id,
-      error: normalized,
+      transcriptId: jobData.transcriptId,
+      errorCode: normalized.code,
+      errorMessage: normalized.message,
+      canRetry: normalized.canRetry,
+      retryCount: jobData.retryCount ?? 0,
+      audioStoragePath: jobData.audioStoragePath,
     });
   } finally {
     if (tempDir) {
@@ -156,7 +321,7 @@ async function runTranscriptionStage(
   sourcePath: string,
   chunkDir: string,
 ): Promise<{ transcriptId: string; text: string }> {
-  await downloadStorageObject(data.audioStoragePath!, sourcePath);
+  await downloadStorageObjectWithRetry(data.audioStoragePath!, sourcePath);
   const normalizedSourcePath = await ensureMono16kWav(sourcePath);
   const chunkPaths = await splitIntoChunks(normalizedSourcePath, chunkDir);
   if (!chunkPaths.length) {
@@ -191,21 +356,27 @@ async function runTranscriptionStage(
 
   const transcriptId = uuidv4();
   const audioSignedUrl = await getSignedUrl(data.audioStoragePath!);
-  await saveTranscription({
+
+  // Build transcription payload without any undefined fields
+  const baseTranscriptionData = {
     id: transcriptId,
     text,
     audioPath: audioSignedUrl,
     durationMs: (data.durationSeconds ?? 0) * 1000,
     timestamp: new Date().toISOString(),
-    confidence:
-      confidenceSamples > 0
-        ? confidenceAccumulator / confidenceSamples
-        : undefined,
     metadata: {
       source: 'soniox',
       jobId: doc.id,
       approxSizeBytes: data.approxSizeBytes,
     },
+  };
+
+  const avgConfidence =
+    confidenceSamples > 0 ? confidenceAccumulator / confidenceSamples : null;
+
+  await saveTranscription({
+    ...baseTranscriptionData,
+    ...(avgConfidence !== null ? { confidence: avgConfidence } : {}),
   });
 
   await doc.ref.update({
@@ -250,7 +421,7 @@ async function runNoteStage(
     });
 
     await doc.ref.update({
-      status: 'done',
+      status: 'completed',
       noteStatus: NOTE_STATUS.ready,
       noteId,
       progress: 100,
@@ -265,7 +436,7 @@ async function runNoteStage(
     const message =
       error instanceof Error ? error.message : 'Failed to generate notes.';
     await doc.ref.update({
-      status: 'done',
+      status: 'completed',
       noteStatus: NOTE_STATUS.error,
       noteError: message,
       noteCanRetry: true,
@@ -273,9 +444,15 @@ async function runNoteStage(
       progress: 100,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    const normalized = normalizeError(error);
+    const jobData = doc.data() as JobData;
     functions.logger.error('Note generation failed', {
       jobId: doc.id,
-      error: message,
+      transcriptId: transcriptId,
+      errorCode: normalized.code,
+      errorMessage: normalized.message,
+      canRetry: normalized.canRetry,
+      retryCount: jobData.retryCount ?? 0,
     });
   }
 }
@@ -345,6 +522,7 @@ async function processChunks(
   const results: Array<{ text: string; confidence?: number }> = new Array(total);
   let processed = 0;
   let nextIndex = 0;
+  const jobId = doc.id;
   const jobDeadline =
     Date.now() +
     Math.max(
@@ -366,23 +544,77 @@ async function processChunks(
         }
 
         const chunkPath = chunkPaths[index];
-        const buffer = await fs.readFile(chunkPath);
-        const result = await transcribeWithSoniox(buffer, {
-          timeoutMs: timeoutMsPerChunk,
-        });
+        const chunkStoragePath = `transcription_jobs/${jobId}/chunks/${index}.wav`;
+        let chunkUploaded = false;
 
-        results[index] = {
-          text: result.text.trim(),
-          confidence: result.confidence,
-        };
+        try {
+          // Read chunk file as buffer
+          const buffer = await fs.readFile(chunkPath);
 
-        processed += 1;
-        const progress =
-          15 + Math.round((processed / total) * 70); // 15% for upload, 15% for notes
-        await doc.ref.update({
-          progress,
-          workerHeartbeat: admin.firestore.FieldValue.serverTimestamp(),
-        });
+          // Upload chunk to Storage temporarily
+          functions.logger.debug('Uploading chunk to Storage', {
+            jobId,
+            chunkIndex: index,
+            chunkStoragePath,
+          });
+          await uploadFile(buffer, chunkStoragePath, 'audio/wav');
+          chunkUploaded = true;
+
+          // Transcribe using storage path
+          functions.logger.debug('Starting transcription for chunk', {
+            jobId,
+            chunkIndex: index,
+          });
+          const result = await transcribeWithSoniox(chunkStoragePath, {
+            timeoutMs: timeoutMsPerChunk,
+          });
+
+          functions.logger.debug('Transcription completed for chunk', {
+            jobId,
+            chunkIndex: index,
+          });
+
+          results[index] = {
+            text: result.text.trim(),
+            confidence: result.confidence,
+          };
+
+          // Delete temporary chunk from Storage
+          await deleteFile(chunkStoragePath);
+          chunkUploaded = false;
+          functions.logger.debug('Deleted temporary chunk from Storage', {
+            jobId,
+            chunkIndex: index,
+          });
+
+          processed += 1;
+          const progress =
+            15 + Math.round((processed / total) * 70); // 15% for uploaded, 70% for processing chunks (15-85%)
+          await doc.ref.update({
+            progress,
+            workerHeartbeat: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (error) {
+          // Cleanup: Delete chunk from Storage if it was uploaded
+          if (chunkUploaded) {
+            try {
+              await deleteFile(chunkStoragePath);
+              functions.logger.debug('Cleaned up chunk from Storage after error', {
+                jobId,
+                chunkIndex: index,
+              });
+            } catch (cleanupError) {
+              functions.logger.error('Failed to cleanup chunk from Storage', {
+                jobId,
+                chunkIndex: index,
+                error: cleanupError,
+              });
+            }
+          }
+
+          // Re-throw error to be handled by caller
+          throw error;
+        }
       }
     })(),
   );
@@ -461,6 +693,50 @@ function normalizeError(error: unknown): {
   }
 
   if (error instanceof Error) {
+    // Check for Firebase Storage errors
+    const errorMessage = error.message.toLowerCase();
+    const errorCode = (error as any).code;
+    
+    // Firebase Storage network errors (retryable)
+    if (
+      errorCode === 'ECONNRESET' ||
+      errorCode === 'ETIMEDOUT' ||
+      errorCode === 'ENOTFOUND' ||
+      errorCode === 'ECONNREFUSED' ||
+      errorCode === 'EAI_AGAIN' ||
+      errorMessage.includes('timeout') ||
+      errorMessage.includes('econnreset') ||
+      errorMessage.includes('etimedout') ||
+      errorMessage.includes('network') ||
+      errorMessage.includes('connection')
+    ) {
+      return {
+        message: error.message,
+        code: 'timeout',
+        canRetry: true,
+      };
+    }
+
+    // Firebase Storage 5xx server errors (retryable)
+    const httpStatus = errorCode || (error as any).status || (error as any).statusCode;
+    if (typeof httpStatus === 'number' && httpStatus >= 500 && httpStatus < 600) {
+      return {
+        message: error.message,
+        code: 'provider_down',
+        canRetry: true,
+      };
+    }
+
+    // Firebase Storage 4xx client errors (non-retryable)
+    if (httpStatus === 400 || httpStatus === 403 || httpStatus === 404) {
+      return {
+        message: error.message,
+        code: 'bad_audio',
+        canRetry: false,
+      };
+    }
+
+    // Generic error (non-retryable)
     return {
       message: error.message,
       code: 'unknown',
@@ -479,14 +755,180 @@ async function markJobError(
   doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>,
   errorCode: SonioxErrorCode,
   message: string,
+  canRetry: boolean = false,
 ) {
   await doc.ref.update({
     status: 'error',
+    workerStatus: 'failed',
     errorCode,
     errorMessage: message,
-    canRetry: false,
+    canRetry,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 }
+
+// Configuration constants for retry mechanism
+const DEFAULT_MAX_RETRIES = 5;
+const RETRY_DELAYS_MS = [
+  5 * 60 * 1000, // Retry 1: 5 minutes
+  15 * 60 * 1000, // Retry 2: 15 minutes
+  60 * 60 * 1000, // Retry 3: 1 hour
+  4 * 60 * 60 * 1000, // Retry 4: 4 hours
+  24 * 60 * 60 * 1000, // Retry 5: 24 hours
+];
+
+/**
+ * Scheduled function that runs every 5 minutes to manage retries for failed jobs.
+ *
+ * Invariants:
+ * - retryCount is incremented only when a future retry is scheduled (setting retryScheduledAt).
+ * - When a scheduled retry time has passed, we trigger the retry by setting status to 'uploaded'
+ *   and clearing retryScheduledAt, without changing retryCount.
+ */
+export const scheduleRetryJobs = functions
+  .region(REGION)
+  .runWith({
+    timeoutSeconds: 540,
+    memory: '512MB',
+  })
+  .pubsub.schedule('*/5 * * * *') // Every 5 minutes
+  .timeZone('UTC')
+  .onRun(async () => {
+    const db = admin.firestore();
+    const now = admin.firestore.Timestamp.now();
+
+    functions.logger.info('Starting retry job scheduler', {
+      timestamp: now.toDate().toISOString(),
+    });
+
+    try {
+      // Query jobs that are eligible for retry
+      const retryableJobsQuery = db
+        .collection('transcription_jobs')
+        .where('status', '==', 'error')
+        .where('canRetry', '==', true)
+        .limit(100); // Process up to 100 jobs at a time
+
+      const snapshot = await retryableJobsQuery.get();
+
+      if (snapshot.empty) {
+        functions.logger.info('No jobs need retry scheduling');
+        return;
+      }
+
+      let scheduled = 0;
+      let skipped = 0;
+
+      const updatePromises = snapshot.docs.map(async (doc) => {
+        const jobData = { id: doc.id, ...doc.data() } as JobData;
+
+        const retryCount = jobData.retryCount ?? 0;
+        const maxRetries = jobData.maxRetries ?? DEFAULT_MAX_RETRIES;
+
+        // Respect max retry limit
+        if (retryCount >= maxRetries) {
+          skipped++;
+          functions.logger.debug('Job exceeded max retries', {
+            jobId: doc.id,
+            retryCount,
+            maxRetries,
+          });
+          return;
+        }
+
+        const retryScheduledAt = jobData.retryScheduledAt;
+
+        // Case 1: no retry scheduled yet -> schedule the first/next retry
+        if (!retryScheduledAt) {
+          const delayIndex = Math.min(retryCount, RETRY_DELAYS_MS.length - 1);
+          const delayMs = RETRY_DELAYS_MS[delayIndex];
+          const nextRetryTime = admin.firestore.Timestamp.fromMillis(
+            now.toMillis() + delayMs,
+          );
+
+          try {
+            await doc.ref.update({
+              retryScheduledAt: nextRetryTime,
+              retryCount: retryCount + 1,
+              lastRetryAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            functions.logger.info('Scheduled retry for job', {
+              jobId: doc.id,
+              retryCount: retryCount + 1,
+              nextRetryTime: nextRetryTime.toDate().toISOString(),
+            });
+            scheduled++;
+          } catch (updateError) {
+            functions.logger.error('Failed to schedule retry for job', {
+              jobId: doc.id,
+              error:
+                updateError instanceof Error
+                  ? updateError.message
+                  : String(updateError),
+            });
+          }
+
+          return;
+        }
+
+        // Case 2: retryScheduledAt exists -> check if it's time to trigger
+        const scheduledTime =
+          retryScheduledAt instanceof admin.firestore.Timestamp
+            ? retryScheduledAt
+            : null;
+
+        if (!scheduledTime) {
+          skipped++;
+          return;
+        }
+
+        if (scheduledTime.toMillis() > now.toMillis()) {
+          // Not yet time to retry
+          skipped++;
+          return;
+        }
+
+        // Time has passed -> trigger retry by setting status to 'uploaded'
+        try {
+          await doc.ref.update({
+            status: 'uploaded',
+            retryScheduledAt: admin.firestore.FieldValue.delete(),
+            lastRetryAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          functions.logger.info('Triggered retry for job', {
+            jobId: doc.id,
+            retryCount,
+          });
+          scheduled++;
+        } catch (updateError) {
+          functions.logger.error('Failed to trigger retry for job', {
+            jobId: doc.id,
+            error:
+              updateError instanceof Error
+                ? updateError.message
+                : String(updateError),
+          });
+        }
+      });
+
+      await Promise.all(updatePromises);
+
+      functions.logger.info('Retry job scheduler completed', {
+        totalJobs: snapshot.docs.length,
+        scheduled,
+        skipped,
+      });
+    } catch (error) {
+      functions.logger.error('Retry job scheduler failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
+  });
 
 

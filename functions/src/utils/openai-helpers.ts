@@ -2,6 +2,11 @@ import { openai } from '../config/openai';
 
 const GPT_MODEL = 'gpt-4.1-mini';
 
+// Study-notes specific config
+const STUDY_NOTES_TIMEOUT_MS = 10 * 60 * 1000; // ~10 minutes
+const STUDY_NOTES_MAX_RETRIES = 3;
+const MIN_TRANSCRIPT_CHARS = 20;
+
 export interface SummarizeOptions {
   text: string;
 }
@@ -23,6 +28,22 @@ export interface StudyNote {
   keyPoints: string[];
   actionItems: string[];
   studyQuestions: string[];
+}
+
+export interface GenerationMeta {
+  model: string;
+  requestId?: string;
+  createdAt: string; // ISO
+  attempts: number;
+  sanitized: boolean;
+  warnings?: string[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  usage?: any; // raw usage object from OpenAI (optional)
+}
+
+export interface GenerationResult {
+  note: StudyNote;
+  meta: GenerationMeta;
 }
 
 /**
@@ -182,68 +203,170 @@ ${content}`;
 }
 
 export async function generateStudyNotes(content: string): Promise<StudyNote> {
-  const prompt = `
-<system>
-You create accurate, student-friendly study notes strictly from the provided transcript.
-Respond ONLY in valid JSON with this structure:
+  const { note } = await generateStudyNotesWithMeta(content);
+  return note;
+}
+
+const STUDY_NOTES_JSON_SCHEMA_PROMPT = `Respond ONLY with a single valid JSON object EXACTLY matching this schema (no surrounding text):
 {
   "title": "short descriptive title",
-  "summary": "2–3 sentence overview",
-  "key_points": ["concise bullet", "..."],
-  "action_items": ["practical step", "..."],
-  "study_questions": ["thoughtful question", "..."]
+  "summary": "multi-paragraph overview that scales with transcript length",
+  "key_points": ["concise bullet capturing a main idea", "..."],
+  "action_items": ["practical step or concrete recommendation", "..."],
+  "study_questions": ["thoughtful question for reflection or comprehension", "..."]
 }
 
 Guidelines:
-- Never fabricate content—use transcript only.
-- Key points should capture major ideas (4–6 items).
-- Action items should be concrete steps for the learner (2–4 items).
-- Study questions should prompt reflection or comprehension (3–5 items).
-- Keep sentences under 30 words when possible.
+- Use ONLY information from the provided transcript. Do NOT fabricate.
+- For short transcripts, keep the summary and lists brief. For long transcripts, write a more detailed, multi-paragraph summary that still stays concise and focused.
+- Key points should capture major ideas and sections. For longer transcripts, it is fine to have more items (for example 4–20 bullets).
+- Action items should be concrete, learner-focused steps (for example 2–10 items).
+- Study questions should help the learner review, apply, and reflect (for example 3–15 questions).
+- Keep individual sentences reasonably short and clear (around 30 words or fewer when possible).`;
+
+export async function generateStudyNotesWithMeta(
+  content: string,
+  opts?: {
+    saveToFirestore?: (note: StudyNote, meta: GenerationMeta) => Promise<void>;
+  },
+): Promise<GenerationResult> {
+  if (!content || typeof content !== 'string') {
+    throw new Error('Transcript content must be a non-empty string');
+  }
+
+  const startedAt = new Date();
+  const meta: GenerationMeta = {
+    model: GPT_MODEL,
+    createdAt: startedAt.toISOString(),
+    attempts: 0,
+    sanitized: false,
+  };
+
+  const { text: sanitized, warnings } = sanitizeTranscript(content);
+  meta.sanitized = true;
+  if (warnings.length) {
+    meta.warnings = warnings;
+  }
+
+  if (sanitized.trim().length < MIN_TRANSCRIPT_CHARS) {
+    throw new Error('Transcript too short to generate meaningful notes');
+  }
+
+  const prompt = `
+<system>
+You create accurate, student-friendly study notes strictly from the provided transcript.
+
+${STUDY_NOTES_JSON_SCHEMA_PROMPT}
 </system>
 
 <user>
-Generate structured study notes for this transcript:
-${content}
+Generate structured study notes strictly from the transcript below. Use only the transcript information.
+Output must be valid JSON matching the schema.
+
+Transcript:
+"""
+${sanitized}
+"""
 </user>
 `;
 
-  const response = await openai.responses.create({
+  const basePayload = {
     model: GPT_MODEL,
     input: prompt,
-    temperature: 0.15,
-  });
+    temperature: 0,
+    top_p: 1,
+    presence_penalty: 0,
+    frequency_penalty: 0,
+  } as any;
 
-  const text = extractResponseText(response);
-  if (!text) {
-    throw new Error('Study note generation failed: empty response');
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= STUDY_NOTES_MAX_RETRIES; attempt++) {
+    meta.attempts = attempt;
+
+    try {
+      const response = await callOpenAIWithTimeout(
+        basePayload,
+        STUDY_NOTES_TIMEOUT_MS,
+      );
+
+      if ((response as any).usage) {
+        meta.usage = (response as any).usage;
+      }
+      if ((response as any).id) {
+        meta.requestId = (response as any).id;
+      }
+
+      const rawText = extractResponseText(response);
+      const parsed = await parseModelJson(rawText);
+      const note = normalizeStudyNoteFromModel(parsed);
+
+      if (opts?.saveToFirestore) {
+        try {
+          await opts.saveToFirestore(note, meta);
+        } catch (saveErr) {
+          meta.warnings = meta.warnings ?? [];
+          meta.warnings.push(
+            'Failed to save study note: ' + String(saveErr),
+          );
+        }
+      }
+
+      return { note, meta };
+    } catch (err) {
+      lastError = err;
+
+      if (
+        err instanceof Error &&
+        /Could not parse JSON from model response|Unexpected token/.test(
+          err.message,
+        )
+      ) {
+        try {
+          const repairPayload = {
+            model: GPT_MODEL,
+            input: jsonRepairPrompt(
+              (err as any).rawText ?? (err as Error).message,
+            ),
+            temperature: 0,
+            top_p: 1,
+          } as any;
+
+          const repairResponse = await callOpenAIWithTimeout(
+            repairPayload,
+            STUDY_NOTES_TIMEOUT_MS,
+          );
+          const repairText = extractResponseText(repairResponse);
+          const repairedParsed = await parseModelJson(repairText);
+          const repairedNote = normalizeStudyNoteFromModel(repairedParsed);
+
+          if (opts?.saveToFirestore) {
+            try {
+              await opts.saveToFirestore(repairedNote, meta);
+            } catch (saveErr) {
+              meta.warnings = meta.warnings ?? [];
+              meta.warnings.push(
+                'Failed to save study note after repair: ' +
+                  String(saveErr),
+              );
+            }
+          }
+
+          return { note: repairedNote, meta };
+        } catch (repairErr) {
+          meta.warnings = meta.warnings ?? [];
+          meta.warnings.push(
+            'JSON repair attempt failed: ' + String(repairErr),
+          );
+        }
+      }
+
+      const backoffMs = Math.pow(2, attempt) * 500;
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
   }
 
-  try {
-    const parsed = JSON.parse(text);
-    return {
-      title: ensureString(parsed.title, 'title'),
-      summary: ensureString(parsed.summary, 'summary'),
-      keyPoints: ensureStringArray(
-        parsed.key_points ?? parsed.keyPoints,
-        'key_points',
-      ),
-      actionItems: ensureStringArray(
-        parsed.action_items ?? parsed.actionItems,
-        'action_items',
-      ),
-      studyQuestions: ensureStringArray(
-        parsed.study_questions ?? parsed.studyQuestions,
-        'study_questions',
-      ),
-    };
-  } catch (error) {
-    throw new Error(
-      `Failed to parse study note response: ${
-        error instanceof Error ? error.message : error
-      }`,
-    );
-  }
+  throw new Error('Failed to generate study notes: ' + String(lastError));
 }
 
 interface QuizQuestion {
@@ -269,14 +392,29 @@ function ensureString(value: unknown, field: string): string {
   return trimmed;
 }
 
-function ensureStringArray(value: unknown, field: string): string[] {
+function ensureStringArray(
+  value: unknown,
+  field: string,
+  min = 0,
+  max = Number.POSITIVE_INFINITY,
+): string[] {
   if (!Array.isArray(value)) {
     throw new Error(`${field} must be an array`);
   }
 
-  const normalized = value.map((item, index) =>
-    ensureString(item, `${field}[${index}]`),
-  );
+  const normalized = value
+    .map((item, index) => ensureString(item, `${field}[${index}]`))
+    .filter(Boolean);
+
+  if (normalized.length < min) {
+    throw new Error(
+      `${field} must contain at least ${min} items (received ${normalized.length})`,
+    );
+  }
+
+  if (normalized.length > max) {
+    return normalized.slice(0, max);
+  }
 
   return normalized;
 }
@@ -403,3 +541,206 @@ function extractResponseText(response: any): string {
   throw new Error('OpenAI response did not include any text output');
 }
 
+/**
+ * Study note helpers
+ */
+
+function redactPII(text: string): { text: string; redacted: boolean } {
+  let redacted = false;
+  let result = text ?? '';
+
+  // Emails
+  const emailRegex =
+    /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  if (emailRegex.test(result)) {
+    result = result.replace(emailRegex, '[REDACTED_EMAIL]');
+    redacted = true;
+  }
+
+  // Phone numbers (very loose)
+  const phoneRegex = /\+?\d{7,15}/g;
+  if (phoneRegex.test(result)) {
+    result = result.replace(phoneRegex, '[REDACTED_PHONE]');
+    redacted = true;
+  }
+
+  // Simple removal of <system>, <user>, <assistant> style tags
+  const tagRegex = /<\/?(system|user|assistant)[^>]*>/gi;
+  if (tagRegex.test(result)) {
+    result = result.replace(tagRegex, '');
+    redacted = true;
+  }
+
+  return { text: result, redacted };
+}
+
+function sanitizeTranscript(
+  content: string,
+): { text: string; warnings: string[] } {
+  const warnings: string[] = [];
+  let text = content ?? '';
+
+  // Normalize whitespace
+  text = text.replace(/\r\n/g, '\n').trim();
+
+  // Remove suspicious embedded instruction blocks like </user><system>...
+  text = text.replace(/<\/?(system|user|assistant)[\s\S]*?>/gi, '');
+
+  // Remove control characters
+  text = text.replace(
+    /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/g,
+    ' ',
+  );
+
+  const pii = redactPII(text);
+  text = pii.text;
+  if (pii.redacted) {
+    warnings.push('PII redacted from transcript');
+  }
+
+  // Collapse repeated newlines
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  return { text, warnings };
+}
+
+function extractJsonObject(text: string): string | null {
+  const firstBrace = text.indexOf('{');
+  if (firstBrace === -1) return null;
+
+  let depth = 0;
+  for (let i = firstBrace; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    if (text[i] === '}') depth--;
+    if (depth === 0) {
+      return text.slice(firstBrace, i + 1);
+    }
+  }
+
+  return null;
+}
+
+function extractJsonFromMarkdown(text: string): string | null {
+  // Handles ```json ... ``` and ``` ... ```
+  const mdJson = /```\s*(?:json)?([\s\S]*?)```/i.exec(text);
+  if (mdJson && mdJson[1]) {
+    return mdJson[1].trim();
+  }
+  return null;
+}
+
+async function parseModelJson(responseText: string): Promise<any> {
+  const original = responseText ?? '';
+
+  // Attempt 1: direct parse
+  try {
+    const candidate = original.trim();
+    return JSON.parse(candidate);
+  } catch {
+    // fall through
+  }
+
+  // Attempt 2: markdown block
+  const md = extractJsonFromMarkdown(original);
+  if (md) {
+    try {
+      return JSON.parse(md);
+    } catch {
+      // ignore and continue
+    }
+  }
+
+  // Attempt 3: balanced braces extraction
+  const obj = extractJsonObject(original);
+  if (obj) {
+    try {
+      return JSON.parse(obj);
+    } catch {
+      // ignore and continue
+    }
+  }
+
+  const error = new Error(
+    'Could not parse JSON from model response',
+  ) as Error & { rawText?: string };
+  error.rawText = original;
+  throw error;
+}
+
+function jsonRepairPrompt(brokenText: string): string {
+  return `You are a JSON fixer.
+
+Extract and return ONLY a single valid JSON object that conforms EXACTLY to the schema below and contains the same data as the broken input. Do not add or remove informational content except to correct escaping, trailing commas or structural issues. If a field is missing, add it with a short explicit placeholder string "(no content available)".
+
+Schema:
+
+${STUDY_NOTES_JSON_SCHEMA_PROMPT}
+
+Broken model output:
+
+${brokenText}
+
+Return ONLY the repaired JSON object.`;
+}
+
+function normalizeStudyNoteFromModel(modelPayload: any): StudyNote {
+  const title = ensureString(
+    modelPayload?.title ?? '(no content available)',
+    'title',
+  );
+  const summary = ensureString(
+    modelPayload?.summary ?? '(no content available)',
+    'summary',
+  );
+
+  const keyPoints = ensureStringArray(
+    modelPayload?.key_points ?? modelPayload?.keyPoints ?? [],
+    'key_points',
+    4,
+    20,
+  );
+
+  const actionItems = ensureStringArray(
+    modelPayload?.action_items ?? modelPayload?.actionItems ?? [],
+    'action_items',
+    2,
+    10,
+  );
+
+  const studyQuestions = ensureStringArray(
+    modelPayload?.study_questions ?? modelPayload?.studyQuestions ?? [],
+    'study_questions',
+    3,
+    15,
+  );
+
+  return {
+    title,
+    summary,
+    keyPoints,
+    actionItems,
+    studyQuestions,
+  };
+}
+
+function callOpenAIWithTimeout(
+  payload: any,
+  timeoutMs: number,
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('OpenAI request timed out'));
+    }, timeoutMs);
+
+    openai.responses
+      .create(payload)
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
