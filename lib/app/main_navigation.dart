@@ -25,6 +25,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Color(0xFF1E1E1E),
       body: IndexedStack(
         index: _currentIndex,
         children: _pages,
@@ -64,7 +65,7 @@ class _CustomCircularNavBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(40),
-            color: Color(0xFFDFF4F9),
+            color: Color(0xFF1E1E1E),
             boxShadow: [
               BoxShadow(
                 color: const Color.fromARGB(255, 89, 96, 192)

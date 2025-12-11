@@ -20,33 +20,32 @@ class HomeDashboardPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: _kBackgroundColor,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _HeaderWidget(),
-              const SizedBox(height: 32.0),
-              const _SearchBarWidget(),
-              const SizedBox(height: 32.0),
-              Expanded(
-                child: _FeatureCardsGrid(
-                  onNoteTakerTap: () {
-                    Navigator.pushNamed(context, AppRoutes.transcription);
-                  },
-                  onSummaryTap: () {
-                    Navigator.pushNamed(context, AppRoutes.summarization);
-                  },
-                  onPracticeTap: () {
-                    Navigator.pushNamed(context, AppRoutes.quiz);
-                  },
-                  onAudioNotesTap: () {
-                    Navigator.pushNamed(context, AppRoutes.tts);
-                  },
-                ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _HeaderWidget(),
+            const SizedBox(height: 32.0),
+            const _SearchBarWidget(),
+            const SizedBox(height: 32.0),
+             SizedBox(
+              height: MediaQuery.of(context).size.height *0.5,
+              width: double.infinity,
+              child: _FeatureCardsGrid(
+                onNoteTakerTap: () {
+                  Navigator.pushNamed(context, AppRoutes.transcription);
+                },
+                onSummaryTap: () {
+                  Navigator.pushNamed(context, AppRoutes.summarization);
+                },
+                onPracticeTap: () {
+                  Navigator.pushNamed(context, AppRoutes.quiz);
+                },
+                onAudioNotesTap: () {
+                  Navigator.pushNamed(context, AppRoutes.tts);
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     
@@ -260,58 +259,44 @@ class _FeatureCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(20.0),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(20.0),
+        
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(20.0),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                Icon(
-                  icon,
-                  size: isLarge ? 48 : 36,
-                  color: iconColor,
-                ),
-              ],
+            Icon(
+              icon,
+              size: isLarge ? 70 : 36,
+              color: iconColor,
             ),
-            if (isLarge) const SizedBox(height: 40),
+            isLarge? SizedBox(height: 40): SizedBox(height: 5),
             Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
                   title,
                   style: TextStyle(
                     color: _kWhite,
-                    fontSize: isLarge ? 24 : 18,
+                    fontSize: isLarge ? 24 : 15,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 4.0),
+               isLarge? SizedBox(height: 4): SizedBox(height: 1),
                 Text(
                   subtitle,
                   style: TextStyle(
                     color: _kLightGray,
-                    fontSize: isLarge ? 16 : 14,
+                    fontSize: isLarge ? 16 : 12,
                   ),
                 ),
               ],
             ),
-            const Spacer(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: isLarge ? 24 : 18,
-                  color: _kLightGray.withOpacity(0.6),
-                ),
-              ],
-            ),
+            
+            
           ],
         ),
       ),
