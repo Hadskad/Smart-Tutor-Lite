@@ -5,6 +5,12 @@ import '../features/timetable/presentation/pages/timetable_page.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
 
+// --- Color Palette (matching home dashboard) ---
+const Color _kBackgroundColor = Color(0xFF1E1E1E);
+const Color _kCardColor = Color(0xFF333333);
+const Color _kAccentBlue = Color(0xFF00BFFF);
+const Color _kWhite = Colors.white;
+
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
 
@@ -25,7 +31,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF1E1E1E),
+      backgroundColor: _kBackgroundColor,
       body: IndexedStack(
         index: _currentIndex,
         children: _pages,
@@ -53,23 +59,17 @@ class _CustomCircularNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Teal/cyan color for active state (matching image)
-    const activeColor =
-        Color.fromARGB(255, 6, 28, 36); // Using tertiary from theme
-    const inactiveColor = Color.fromARGB(255, 50, 64, 95); // Light grey
-
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 5),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(40),
-            color: Color(0xFF1E1E1E),
+            color: _kCardColor,
             boxShadow: [
               BoxShadow(
-                color: const Color.fromARGB(255, 89, 96, 192)
-                    .withValues(alpha: 0.05),
+                color: _kAccentBlue.withOpacity(0.1),
                 blurRadius: 10,
                 offset: const Offset(0, -2),
               ),
@@ -82,32 +82,24 @@ class _CustomCircularNavBar extends StatelessWidget {
                 icon: Icons.home_outlined,
                 selectedIcon: Icons.home,
                 isSelected: currentIndex == 0,
-                activeColor: activeColor,
-                inactiveColor: inactiveColor,
                 onTap: () => onTap(0),
               ),
               _NavIconButton(
                 icon: Icons.schedule_outlined,
                 selectedIcon: Icons.schedule,
                 isSelected: currentIndex == 1,
-                activeColor: activeColor,
-                inactiveColor: inactiveColor,
                 onTap: () => onTap(1),
               ),
               _NavIconButton(
                 icon: Icons.settings_outlined,
                 selectedIcon: Icons.settings,
                 isSelected: currentIndex == 2,
-                activeColor: activeColor,
-                inactiveColor: inactiveColor,
                 onTap: () => onTap(2),
               ),
               _NavIconButton(
                 icon: Icons.person_outline,
                 selectedIcon: Icons.person,
                 isSelected: currentIndex == 3,
-                activeColor: activeColor,
-                inactiveColor: inactiveColor,
                 onTap: () => onTap(3),
               ),
             ],
@@ -123,21 +115,18 @@ class _NavIconButton extends StatelessWidget {
     required this.icon,
     required this.selectedIcon,
     required this.isSelected,
-    required this.activeColor,
-    required this.inactiveColor,
     required this.onTap,
   });
 
   final IconData icon;
   final IconData selectedIcon;
   final bool isSelected;
-  final Color activeColor;
-  final Color inactiveColor;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final circleColor = isSelected ? activeColor : inactiveColor;
+    final circleColor =
+        isSelected ? _kAccentBlue : _kCardColor.withOpacity(0.5);
     final iconData = isSelected ? selectedIcon : icon;
 
     return GestureDetector(
@@ -149,10 +138,19 @@ class _NavIconButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: circleColor,
           shape: BoxShape.circle,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: _kAccentBlue.withOpacity(0.3),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
         ),
         child: Icon(
           iconData,
-          color: Colors.white,
+          color: _kWhite,
           size: 24,
         ),
       ),

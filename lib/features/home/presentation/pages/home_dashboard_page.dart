@@ -20,35 +20,47 @@ class HomeDashboardPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: _kBackgroundColor,
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _HeaderWidget(),
-            const SizedBox(height: 32.0),
-            const _SearchBarWidget(),
-            const SizedBox(height: 32.0),
-             SizedBox(
-              height: MediaQuery.of(context).size.height *0.5,
-              width: double.infinity,
-              child: _FeatureCardsGrid(
-                onNoteTakerTap: () {
-                  Navigator.pushNamed(context, AppRoutes.transcription);
-                },
-                onSummaryTap: () {
-                  Navigator.pushNamed(context, AppRoutes.summarization);
-                },
-                onPracticeTap: () {
-                  Navigator.pushNamed(context, AppRoutes.quiz);
-                },
-                onAudioNotesTap: () {
-                  Navigator.pushNamed(context, AppRoutes.tts);
-                },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 5.0),
+          child: Column(
+            children: [
+              const _HeaderWidget(),
+              const SizedBox(height: 32.0),
+              const _SearchBarWidget(),
+              const SizedBox(height: 32.0),
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.5,
+                width: double.infinity,
+                child: _FeatureCardsGrid(
+                  onNoteTakerTap: () {
+                    Navigator.pushNamed(context, AppRoutes.transcription);
+                  },
+                  onSummaryTap: () {
+                    Navigator.pushNamed(context, AppRoutes.summarization);
+                  },
+                  onPracticeTap: () {
+                    Navigator.pushNamed(context, AppRoutes.quiz);
+                  },
+                  onAudioNotesTap: () {
+                    Navigator.pushNamed(context, AppRoutes.tts);
+                  },
+                ),
               ),
-            ),
-          ],
+              SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Text('My Courses:',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: _kLightGray,
+                          fontSize: 22)),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-    
     );
   }
 }
@@ -174,7 +186,7 @@ class _FeatureCardsGrid extends StatelessWidget {
       children: [
         // Large dominant card: Note Taker
         Expanded(
-          flex: 2,
+          flex: 3,
           child: _FeatureCard(
             title: 'Note Taker',
             subtitle: 'Lectures → notes',
@@ -185,10 +197,10 @@ class _FeatureCardsGrid extends StatelessWidget {
             onTap: onNoteTakerTap,
           ),
         ),
-        const SizedBox(width: 16.0),
+        const SizedBox(width: 2),
         // Stacked smaller cards
         Expanded(
-          flex: 1,
+          flex: 2,
           child: Column(
             children: [
               Expanded(
@@ -259,7 +271,7 @@ class _FeatureCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(20.0),
       onTap: onTap,
       child: Container(
-        
+        padding: EdgeInsets.all(isLarge ? 0 : 6),
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(20.0),
@@ -273,19 +285,24 @@ class _FeatureCard extends StatelessWidget {
               size: isLarge ? 70 : 36,
               color: iconColor,
             ),
-            isLarge? SizedBox(height: 40): SizedBox(height: 5),
+            isLarge ? SizedBox(height: 40) : SizedBox(height: 5),
             Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: _kWhite,
-                    fontSize: isLarge ? 24 : 15,
-                    fontWeight: FontWeight.bold,
+                Padding(
+                  padding: isLarge
+                      ? EdgeInsets.all(0)
+                      : EdgeInsets.symmetric(horizontal: 3),
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: _kWhite,
+                      fontSize: isLarge ? 24 : 15,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-               isLarge? SizedBox(height: 4): SizedBox(height: 1),
+                isLarge ? SizedBox(height: 4) : SizedBox(height: 1),
                 Text(
                   subtitle,
                   style: TextStyle(
@@ -295,12 +312,9 @@ class _FeatureCard extends StatelessWidget {
                 ),
               ],
             ),
-            
-            
           ],
         ),
       ),
     );
   }
 }
-

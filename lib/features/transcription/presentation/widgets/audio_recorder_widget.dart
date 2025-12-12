@@ -7,6 +7,13 @@ import '../bloc/transcription_bloc.dart';
 import '../bloc/transcription_event.dart';
 import '../bloc/transcription_state.dart';
 
+// --- Color Palette (matching home dashboard) ---
+const Color _kAccentBlue = Color(0xFF00BFFF);
+const Color _kAccentCoral = Color(0xFFFF7043);
+const Color _kWhite = Colors.white;
+const Color _kLightGray = Color(0xFFCCCCCC);
+const Color _kDarkGray = Color(0xFF888888);
+
 class AudioRecorderWidget extends StatelessWidget {
   const AudioRecorderWidget({super.key});
 
@@ -21,8 +28,6 @@ class AudioRecorderWidget extends StatelessWidget {
         final isInputTooLow =
             isRecording ? state.isInputTooLow : false;
         final isCloudBusy = state is CloudTranscriptionState;
-        final primaryColor = Theme.of(context).colorScheme.primary;
-        final errorColor = Theme.of(context).colorScheme.error;
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -47,10 +52,10 @@ class AudioRecorderWidget extends StatelessWidget {
               height: 56,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isRecording ? errorColor : primaryColor,
-                  foregroundColor: Colors.white,
+                  backgroundColor: isRecording ? _kAccentCoral : _kAccentBlue,
+                  foregroundColor: _kWhite,
                   elevation: isRecording ? 0 : 4,
-                  shadowColor: primaryColor.withValues(alpha: 0.4),
+                  shadowColor: _kAccentBlue.withOpacity(0.4),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -68,7 +73,7 @@ class AudioRecorderWidget extends StatelessWidget {
                 icon:
                     Icon(isRecording ? Icons.stop_rounded : Icons.mic_rounded),
                 label: Text(
-                  isRecording ? 'Stop Recording' : 'Start Recording',
+                  isRecording ? 'Stop Note Taking' : 'Start Note Taking',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -143,8 +148,6 @@ class _WaveformState extends State<_Waveform>
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
-
     return SizedBox(
       height: 60,
       child: AnimatedBuilder(
@@ -164,11 +167,8 @@ class _WaveformState extends State<_Waveform>
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: widget.isActive
-                          ? primaryColor.withValues(alpha: 0.8)
-                          : Theme.of(context)
-                              .colorScheme
-                              .outline
-                              .withValues(alpha: 0.3),
+                          ? _kAccentBlue.withOpacity(0.8)
+                          : _kDarkGray.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -233,14 +233,12 @@ class _RecordingTimerState extends State<_RecordingTimer> {
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
 
     final isRecording = widget.startedAt != null;
-    final color = isRecording
-        ? Theme.of(context).colorScheme.error
-        : Theme.of(context).colorScheme.outline;
+    final color = isRecording ? _kAccentCoral : _kLightGray;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -259,8 +257,9 @@ class _RecordingTimerState extends State<_RecordingTimer> {
           ],
           Text(
             widget.startedAt == null ? '00:00' : '$minutes:$seconds',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            style: TextStyle(
               color: color,
+              fontSize: 24,
               fontWeight: FontWeight.w700,
               fontFeatures: [const FontFeature.tabularFigures()],
             ),
@@ -282,24 +281,24 @@ class _RecordingInfoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final outline = Theme.of(context).colorScheme.outline;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: outline.withValues(alpha: 0.08),
+        color: _kDarkGray.withOpacity(0.2),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: outline),
+          Icon(icon, size: 16, color: _kLightGray),
           const SizedBox(width: 6),
           Text(
             label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: outline,
-                  fontWeight: FontWeight.w600,
-                ),
+            style: const TextStyle(
+              color: _kLightGray,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -312,26 +311,26 @@ class _LowInputWarning extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final warningColor = Theme.of(context).colorScheme.tertiary;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: warningColor.withValues(alpha: 0.1),
+        color: _kAccentCoral.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: warningColor.withValues(alpha: 0.4)),
+        border: Border.all(color: _kAccentCoral.withOpacity(0.4)),
       ),
       child: Row(
         children: [
-          Icon(Icons.volume_mute_rounded, color: warningColor),
+          const Icon(Icons.volume_mute_rounded, color: _kAccentCoral),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               'We are hearing very little audio. Move closer or uncover the mic.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: warningColor,
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: const TextStyle(
+                color: _kAccentCoral,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -345,23 +344,23 @@ class _RecordingTip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
+        const Icon(
           Icons.lightbulb_outline_rounded,
           size: 18,
-          color: textColor,
+          color: _kAccentBlue,
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             'Tip: Keep the microphone unobstructed—do not cover the speaker while recording.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: textColor,
-                  height: 1.4,
-                ),
+            style: const TextStyle(
+              color: _kLightGray,
+              fontSize: 12,
+              height: 1.4,
+            ),
           ),
         ),
       ],

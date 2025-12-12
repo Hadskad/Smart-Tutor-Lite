@@ -13,6 +13,15 @@ import '../bloc/transcription_state.dart';
 import '../widgets/audio_recorder_widget.dart';
 import 'transcription_detail_page.dart';
 
+// --- Color Palette (matching home dashboard) ---
+const Color _kBackgroundColor = Color(0xFF1E1E1E);
+const Color _kCardColor = Color(0xFF333333);
+const Color _kAccentBlue = Color(0xFF00BFFF);
+const Color _kAccentCoral = Color(0xFFFF7043);
+const Color _kWhite = Colors.white;
+const Color _kLightGray = Color(0xFFCCCCCC);
+const Color _kDarkGray = Color(0xFF888888);
+
 class TranscriptionPage extends StatefulWidget {
   const TranscriptionPage({super.key});
 
@@ -81,11 +90,17 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
         },
         builder: (context, state) {
           return Scaffold(
+            backgroundColor: _kBackgroundColor,
             appBar: AppBar(
-              title: const Text('Record Lectures -> Notes'),
+              backgroundColor: _kCardColor,
+              title: const Text(
+                'Automatic Notes Taker',
+                style: TextStyle(color: _kWhite),
+              ),
+              iconTheme: const IconThemeData(color: _kWhite),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.history),
+                  icon: const Icon(Icons.history, color: _kWhite),
                   onPressed: () {
                     // Placeholder for history filter or settings
                   },
@@ -107,21 +122,15 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                           Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).cardColor,
-                              borderRadius: BorderRadius.circular(24),
+                              color: _kCardColor,
+                              borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.05),
-                                  blurRadius: 20,
+                                  color: _kAccentBlue.withOpacity(0.1),
+                                  blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
                               ],
-                              border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline
-                                    .withValues(alpha: 0.1),
-                              ),
                             ),
                             child: const AudioRecorderWidget(),
                           ),
@@ -139,15 +148,23 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                           Row(
                             children: [
                               Text(
-                                'Recent Transcriptions',
-                                style: Theme.of(context).textTheme.titleLarge,
+                                'Recent Notes',
+                                style: const TextStyle(
+                                  color: _kWhite,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               const Spacer(),
                             ],
                           ),
+                          const SizedBox(height: 8),
                           Text(
                             'You can leave this page—jobs keep running in the background and appear here when ready.',
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: const TextStyle(
+                              color: _kLightGray,
+                              fontSize: 14,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           _buildHistory(state.history),
@@ -171,28 +188,28 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
     if (state is TranscriptionRecording) {
       return _StatusContainer(
         icon: Icons.mic,
-        color: Theme.of(context).colorScheme.error,
+        color: _kAccentCoral,
         label: 'Recording in progress...',
       );
     }
     if (state is TranscriptionProcessing) {
       return _StatusContainer(
         icon: Icons.cloud_upload_rounded,
-        color: Theme.of(context).colorScheme.tertiary,
+        color: _kAccentBlue,
         label: 'Processing audio...',
       );
     }
     if (state is TranscriptionSuccess) {
       return _StatusContainer(
         icon: Icons.check_circle_rounded,
-        color: Theme.of(context).colorScheme.secondary,
+        color: _kAccentBlue,
         label: 'Transcription ready',
       );
     }
     if (state is TranscriptionNotice) {
       final color = state.severity == TranscriptionNoticeSeverity.warning
-          ? Theme.of(context).colorScheme.tertiary
-          : Theme.of(context).colorScheme.primary;
+          ? _kAccentCoral
+          : _kAccentBlue;
       return _StatusContainer(
         icon: Icons.info_outline_rounded,
         color: color,
@@ -202,7 +219,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
     if (state is TranscriptionError) {
       return _StatusContainer(
         icon: Icons.error_outline_rounded,
-        color: Theme.of(context).colorScheme.error,
+        color: _kAccentCoral,
         label: state.message,
       );
     }
@@ -250,22 +267,24 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
             Icon(
               Icons.mic_none_rounded,
               size: 64,
-              color:
-                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+              color: _kDarkGray,
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'No transcriptions yet',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+              style: TextStyle(
+                color: _kLightGray,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'Record something to get started!',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+              style: TextStyle(
+                color: _kDarkGray,
+                fontSize: 14,
+              ),
             ),
           ],
         ),
@@ -279,10 +298,14 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final transcription = history[index];
-        return Card(
+        return Container(
           margin: EdgeInsets.zero,
+          decoration: BoxDecoration(
+            color: _kCardColor,
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             onTap: () {
               Navigator.push(
                 context,
@@ -303,15 +326,12 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withValues(alpha: 0.1),
+                          color: _kAccentBlue.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.graphic_eq,
-                          color: Theme.of(context).colorScheme.primary,
+                          color: _kAccentBlue,
                           size: 20,
                         ),
                       ),
@@ -323,15 +343,11 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                             Text(
                               DateFormat.yMMMd()
                                   .format(transcription.timestamp),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
+                              style: const TextStyle(
+                                color: _kWhite,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Container(
@@ -340,23 +356,16 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .secondary
-                                    .withValues(alpha: 0.1),
+                                color: _kAccentBlue.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 '${(transcription.confidence * 100).toStringAsFixed(0)}% Accuracy',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelSmall
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .secondary,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                style: const TextStyle(
+                                  color: _kAccentBlue,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ],
@@ -364,7 +373,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.play_circle_outline_rounded),
-                        color: Theme.of(context).colorScheme.primary,
+                        color: _kAccentBlue,
                         tooltip: 'Play Audio',
                         onPressed: () {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -382,12 +391,17 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                     transcription.text,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          height: 1.5,
-                        ),
+                    style: const TextStyle(
+                      color: _kLightGray,
+                      fontSize: 16,
+                      height: 1.5,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  const Divider(height: 1),
+                  Divider(
+                    height: 1,
+                    color: _kDarkGray.withOpacity(0.3),
+                  ),
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
@@ -398,7 +412,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                         _generateFlashcards(transcription.id, 'transcription');
                       },
                       style: TextButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.tertiary,
+                        foregroundColor: _kAccentBlue,
                       ),
                     ),
                   ),
@@ -472,10 +486,10 @@ class _StatusContainer extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: color.withValues(alpha: 0.2),
+          color: color.withOpacity(0.3),
         ),
       ),
       child: Row(
@@ -485,10 +499,11 @@ class _StatusContainer extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: TextStyle(
+                color: color,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -504,16 +519,35 @@ class _ModeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile.adaptive(
-      value: value,
-      onChanged: (isOn) {
-        context.read<TranscriptionBloc>().add(ToggleOfflinePreference(isOn));
-      },
-      title: const Text('Always use offline mode'),
-      subtitle: const Text(
-        'Offline mode let\'s you transcribe without internet connection. You are given a raw transcription, compared to the online mode that structures the note for you.',
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _kCardColor,
+        borderRadius: BorderRadius.circular(20),
       ),
-      contentPadding: EdgeInsets.zero,
+      child: SwitchListTile.adaptive(
+        value: value,
+        onChanged: (isOn) {
+          context.read<TranscriptionBloc>().add(ToggleOfflinePreference(isOn));
+        },
+        title: const Text(
+          'Always use offline mode',
+          style: TextStyle(
+            color: _kWhite,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: const Text(
+          'Offline mode let\'s you take notes without internet connection. You are given a raw note, compared to the online mode that structures the note for you.',
+          style: TextStyle(
+            color: _kLightGray,
+            fontSize: 14,
+          ),
+        ),
+        activeColor: _kAccentBlue,
+        contentPadding: EdgeInsets.zero,
+      ),
     );
   }
 }
@@ -525,16 +559,35 @@ class _FastModelToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile.adaptive(
-      value: value,
-      onChanged: (isOn) {
-        context.read<TranscriptionBloc>().add(ToggleFastWhisperModel(isOn));
-      },
-      title: const Text('Enable fast transcribe'),
-      subtitle: const Text(
-        'Transcribes faster but trades some accuracy for speed.',
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _kCardColor,
+        borderRadius: BorderRadius.circular(20),
       ),
-      contentPadding: EdgeInsets.zero,
+      child: SwitchListTile.adaptive(
+        value: value,
+        onChanged: (isOn) {
+          context.read<TranscriptionBloc>().add(ToggleFastWhisperModel(isOn));
+        },
+        title: const Text(
+          'Enable fast note taking',
+          style: TextStyle(
+            color: _kWhite,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: const Text(
+          'Takes notes faster but trades some accuracy for speed.',
+          style: TextStyle(
+            color: _kLightGray,
+            fontSize: 14,
+          ),
+        ),
+        activeColor: _kAccentBlue,
+        contentPadding: EdgeInsets.zero,
+      ),
     );
   }
 }
@@ -562,35 +615,43 @@ class _CloudTranscriptionStatus extends StatelessWidget {
         LinearProgressIndicator(
           value: progress,
           minHeight: 6,
-          backgroundColor: color.withValues(alpha: 0.1),
+          backgroundColor: color.withOpacity(0.1),
           valueColor: AlwaysStoppedAnimation<Color>(color),
         ),
         const SizedBox(height: 8),
-        Text(
+        const Text(
           'You can safely leave this screen; progress is tracked in Recent Transcriptions.',
-          style: Theme.of(context).textTheme.bodySmall,
+          style: TextStyle(
+            color: _kLightGray,
+            fontSize: 12,
+          ),
         ),
         const SizedBox(height: 12),
         if (job.noteStatus == 'error' && job.noteError != null)
           Text(
             'Smart notes failed: ${job.noteError}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
-                  fontWeight: FontWeight.w600,
-                ),
+            style: const TextStyle(
+              color: _kAccentCoral,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           )
         else if (job.noteStatus == 'ready')
-          Text(
+          const Text(
             'Smart notes ready.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.secondary,
-                  fontWeight: FontWeight.w600,
-                ),
+            style: TextStyle(
+              color: _kAccentBlue,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           )
         else if (job.status == TranscriptionJobStatus.generatingNote)
-          Text(
+          const Text(
             'Creating structured lecture notes...',
-            style: Theme.of(context).textTheme.bodySmall,
+            style: TextStyle(
+              color: _kLightGray,
+              fontSize: 12,
+            ),
           ),
         if (job.noteStatus != null) const SizedBox(height: 12),
         Row(
@@ -667,14 +728,13 @@ class _CloudTranscriptionStatus extends StatelessWidget {
     BuildContext context,
     TranscriptionJobStatus status,
   ) {
-    final scheme = Theme.of(context).colorScheme;
     switch (status) {
       case TranscriptionJobStatus.error:
-        return scheme.error;
+        return _kAccentCoral;
       case TranscriptionJobStatus.completed:
-        return scheme.secondary;
+        return _kAccentBlue;
       default:
-        return scheme.primary;
+        return _kAccentBlue;
     }
   }
 
