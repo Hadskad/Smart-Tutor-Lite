@@ -11,6 +11,7 @@ abstract class TtsQueueLocalDataSource {
   Future<void> markAsProcessing(String id);
   Future<void> markAsCompleted(String id);
   Future<void> markAsFailed(String id, String errorMessage);
+  Future<void> markAsPending(String id);
   Future<void> removeFromQueue(String id);
   Future<TtsQueueModel?> getItem(String id);
 }
@@ -48,11 +49,19 @@ class TtsQueueLocalDataSourceImpl implements TtsQueueLocalDataSource {
   Future<List<TtsQueueModel>> getPendingItems() async {
     try {
       final box = await _getBox();
+      const maxRetries = 3;
       final items = box.values
-          .map((data) =>
-              TtsQueueModel.fromJson(Map<String, dynamic>.from(data)))
-          .where((item) => item.status == 'pending')
-          .toList();
+          .map(
+              (data) => TtsQueueModel.fromJson(Map<String, dynamic>.from(data)))
+          .where((item) {
+        // Include pending items, or failed items that haven't exceeded max retries
+        // Exclude permanently failed items (retryCount >= maxRetries)
+        if (item.status == 'pending') return true;
+        if (item.status == 'failed' && item.retryCount < maxRetries) {
+          return true; // Can retry
+        }
+        return false;
+      }).toList();
       // Sort by createdAt, oldest first
       items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       return items;
@@ -68,8 +77,8 @@ class TtsQueueLocalDataSourceImpl implements TtsQueueLocalDataSource {
     try {
       final box = await _getBox();
       final items = box.values
-          .map((data) =>
-              TtsQueueModel.fromJson(Map<String, dynamic>.from(data)))
+          .map(
+              (data) => TtsQueueModel.fromJson(Map<String, dynamic>.from(data)))
           .toList();
       // Sort by createdAt, most recent first
       items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -88,7 +97,10 @@ class TtsQueueLocalDataSourceImpl implements TtsQueueLocalDataSource {
       final data = box.get(id);
       if (data != null) {
         final item = TtsQueueModel.fromJson(Map<String, dynamic>.from(data));
-        final updated = item.copyWith(status: 'processing');
+        final updated = item.copyWith(
+          status: 'processing',
+          updatedAt: DateTime.now(),
+        );
         await box.put(id, updated.toJson());
       }
     } catch (e) {
@@ -121,12 +133,33 @@ class TtsQueueLocalDataSourceImpl implements TtsQueueLocalDataSource {
           status: 'failed',
           errorMessage: errorMessage,
           retryCount: item.retryCount + 1,
+          updatedAt: DateTime.now(),
         );
         await box.put(id, updated.toJson());
       }
     } catch (e) {
       throw CacheFailure(
         message: 'Failed to mark TTS job as failed: ${e.toString()}',
+      );
+    }
+  }
+
+  @override
+  Future<void> markAsPending(String id) async {
+    try {
+      final box = await _getBox();
+      final data = box.get(id);
+      if (data != null) {
+        final item = TtsQueueModel.fromJson(Map<String, dynamic>.from(data));
+        final updated = item.copyWith(
+          status: 'pending',
+          updatedAt: DateTime.now(),
+        );
+        await box.put(id, updated.toJson());
+      }
+    } catch (e) {
+      throw CacheFailure(
+        message: 'Failed to mark TTS job as pending: ${e.toString()}',
       );
     }
   }
@@ -157,4 +190,3 @@ class TtsQueueLocalDataSourceImpl implements TtsQueueLocalDataSource {
     }
   }
 }
-

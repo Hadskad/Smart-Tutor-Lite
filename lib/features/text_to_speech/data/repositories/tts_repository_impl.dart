@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartz/dartz.dart';
 import 'package:hive/hive.dart';
 import 'package:injectable/injectable.dart';
@@ -32,6 +34,9 @@ class TtsRepositoryImpl implements TtsRepository {
   final NetworkInfo _networkInfo;
   final HiveInterface _hive;
   final Uuid _uuid = const Uuid();
+
+  // Track items currently being processed to prevent race conditions
+  final Set<String> _processingItemIds = {};
 
   Future<Box<Map>> _openCacheBox() async {
     if (_hive.isBoxOpen(_ttsJobCacheBox)) {
@@ -85,7 +90,7 @@ class TtsRepositoryImpl implements TtsRepository {
           createdAt: DateTime.now(),
         );
         await _queueDataSource.addToQueue(queueItem);
-        
+
         // Return a special failure that indicates the request was queued
         return Left(
           NetworkFailure(
@@ -134,7 +139,7 @@ class TtsRepositoryImpl implements TtsRepository {
           createdAt: DateTime.now(),
         );
         await _queueDataSource.addToQueue(queueItem);
-        
+
         // Return a special failure that indicates the request was queued
         return Left(
           NetworkFailure(
@@ -229,6 +234,7 @@ class TtsRepositoryImpl implements TtsRepository {
   }
 
   /// Process all pending queued TTS jobs
+  @override
   Future<void> processQueuedTtsJobs() async {
     try {
       final connected = await _networkInfo.isConnected;
@@ -236,18 +242,42 @@ class TtsRepositoryImpl implements TtsRepository {
         return; // Not online, skip processing
       }
 
+      // First, recover stuck "processing" items older than 5 minutes
+      final allItems = await _queueDataSource.getAllItems();
+      const processingTimeout = Duration(minutes: 5);
+      final now = DateTime.now();
+
+      for (final item in allItems) {
+        if (item.status == 'processing' && item.updatedAt != null) {
+          final timeSinceUpdate = now.difference(item.updatedAt!);
+          if (timeSinceUpdate > processingTimeout) {
+            // Skip if currently being processed (not truly stuck)
+            if (_processingItemIds.contains(item.id)) {
+              continue;
+            }
+            // Reset stuck processing item back to pending for retry
+            await _queueDataSource.markAsPending(item.id);
+          }
+        }
+      }
+
       final pendingItems = await _queueDataSource.getPendingItems();
       const maxRetries = 3;
+      const requestTimeout = Duration(minutes: 10);
 
       for (final item in pendingItems) {
-        // Skip items that have exceeded max retries
+        // Skip items that have exceeded max retries (should already be filtered, but double-check)
         if (item.retryCount >= maxRetries) {
-          await _queueDataSource.markAsFailed(
-            item.id,
-            'Maximum retry count exceeded',
-          );
           continue;
         }
+
+        // Skip items currently being processed (race condition protection)
+        if (_processingItemIds.contains(item.id)) {
+          continue;
+        }
+
+        // Lock item for processing
+        _processingItemIds.add(item.id);
 
         try {
           // Mark as processing
@@ -255,14 +285,32 @@ class TtsRepositoryImpl implements TtsRepository {
 
           TtsJobModel result;
           if (item.sourceType == 'text' && item.text != null) {
-            result = await _remoteDataSource.convertTextToAudio(
+            result = await _remoteDataSource
+                .convertTextToAudio(
               text: item.text!,
               voice: item.voice,
+            )
+                .timeout(
+              requestTimeout,
+              onTimeout: () {
+                throw TimeoutException(
+                  'Request timeout after ${requestTimeout.inMinutes} minutes',
+                );
+              },
             );
           } else if (item.sourceType == 'pdf' && item.pdfUrl != null) {
-            result = await _remoteDataSource.convertPdfToAudio(
+            result = await _remoteDataSource
+                .convertPdfToAudio(
               pdfUrl: item.pdfUrl!,
               voice: item.voice,
+            )
+                .timeout(
+              requestTimeout,
+              onTimeout: () {
+                throw TimeoutException(
+                  'Request timeout after ${requestTimeout.inMinutes} minutes',
+                );
+              },
             );
           } else {
             await _queueDataSource.markAsFailed(
@@ -277,12 +325,21 @@ class TtsRepositoryImpl implements TtsRepository {
 
           // Mark as completed (removes from queue)
           await _queueDataSource.markAsCompleted(item.id);
+        } on TimeoutException catch (error) {
+          // Mark as failed due to timeout, will retry later
+          await _queueDataSource.markAsFailed(
+            item.id,
+            error.toString(),
+          );
         } catch (error) {
           // Mark as failed, will retry later
           await _queueDataSource.markAsFailed(
             item.id,
             error.toString(),
           );
+        } finally {
+          // Always unlock the item
+          _processingItemIds.remove(item.id);
         }
       }
     } catch (error) {

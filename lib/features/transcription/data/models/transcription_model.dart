@@ -9,9 +9,21 @@ class TranscriptionModel extends Transcription {
     required super.timestamp,
     required super.confidence,
     super.metadata = const <String, dynamic>{},
+    super.title,
+    super.structuredNote,
   });
 
   factory TranscriptionModel.fromJson(Map<String, dynamic> json) {
+    // Extract structured note if it exists (type-safe)
+    final noteDataRaw = json['structured_note'] ?? json['note'];
+    final Map<String, dynamic>? structuredNote = noteDataRaw is Map
+        ? Map<String, dynamic>.from(Map.from(noteDataRaw))
+        : null;
+
+    // Extract title from structured note or directly from json (type-safe)
+    final titleRaw = json['title'] ?? structuredNote?['title'];
+    final String? title = titleRaw is String ? titleRaw : null;
+
     return TranscriptionModel(
       id: json['id'] as String? ?? '',
       text: json['text'] as String? ?? '',
@@ -32,6 +44,8 @@ class TranscriptionModel extends Transcription {
       metadata: Map<String, dynamic>.from(
         json['metadata'] as Map? ?? const <String, dynamic>{},
       ),
+      title: title,
+      structuredNote: structuredNote,
     );
   }
 
@@ -44,6 +58,8 @@ class TranscriptionModel extends Transcription {
       'timestamp': timestamp.toIso8601String(),
       'confidence': confidence,
       'metadata': metadata,
+      if (title != null) 'title': title,
+      if (structuredNote != null) 'structured_note': structuredNote,
     };
   }
 
@@ -55,6 +71,8 @@ class TranscriptionModel extends Transcription {
     DateTime? timestamp,
     double? confidence,
     Map<String, dynamic>? metadata,
+    String? title,
+    Map<String, dynamic>? structuredNote,
   }) {
     return TranscriptionModel(
       id: id ?? this.id,
@@ -64,6 +82,8 @@ class TranscriptionModel extends Transcription {
       timestamp: timestamp ?? this.timestamp,
       confidence: confidence ?? this.confidence,
       metadata: metadata ?? this.metadata,
+      title: title ?? this.title,
+      structuredNote: structuredNote ?? this.structuredNote,
     );
   }
 
@@ -76,6 +96,10 @@ class TranscriptionModel extends Transcription {
       timestamp: entity.timestamp,
       confidence: entity.confidence,
       metadata: Map<String, dynamic>.from(entity.metadata),
+      title: entity.title,
+      structuredNote: entity.structuredNote != null
+          ? Map<String, dynamic>.from(entity.structuredNote!)
+          : null,
     );
   }
 
@@ -88,6 +112,8 @@ class TranscriptionModel extends Transcription {
       timestamp: timestamp,
       confidence: confidence,
       metadata: metadata,
+      title: title,
+      structuredNote: structuredNote,
     );
   }
 }

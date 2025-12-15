@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../injection_container.dart';
+import '../../../summarization/domain/repositories/summary_repository.dart';
+import '../../../transcription/domain/repositories/transcription_repository.dart';
 import '../../domain/entities/quiz.dart';
 import '../../domain/entities/quiz_result.dart';
 import '../bloc/quiz_bloc.dart';
@@ -227,19 +229,63 @@ class QuizResultsPage extends StatelessWidget {
     );
   }
 
+  Future<bool> _validateSourceExists() async {
+    try {
+      if (quiz.sourceType == 'transcription') {
+        final transcriptionRepo = getIt<TranscriptionRepository>();
+        final result = await transcriptionRepo.getTranscription(quiz.sourceId);
+        return result.fold(
+          (_) => false,
+          (_) => true,
+        );
+      } else if (quiz.sourceType == 'summary') {
+        final summaryRepo = getIt<SummaryRepository>();
+        final result = await summaryRepo.getSummary(quiz.sourceId);
+        return result.fold(
+          (_) => false,
+          (_) => true,
+        );
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> _handleRetakeQuiz(BuildContext context) async {
+    // Validate that source content still exists
+    final sourceExists = await _validateSourceExists();
+    
+    if (!sourceExists) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The source content for this quiz has been deleted. Cannot retake quiz.',
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => QuizTakingPage(quiz: quiz),
+      ),
+    );
+  }
+
   Widget _buildActions(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ElevatedButton.icon(
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => QuizTakingPage(quiz: quiz),
-              ),
-            );
-          },
+          onPressed: () => _handleRetakeQuiz(context),
           icon: const Icon(Icons.refresh),
           label: const Text('Retake Quiz'),
           style: ElevatedButton.styleFrom(

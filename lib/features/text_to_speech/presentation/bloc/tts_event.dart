@@ -63,3 +63,6 @@ class DeleteTtsJobEvent extends TtsEvent {
   List<Object?> get props => [jobId];
 }
 
+class ProcessQueuedJobsEvent extends TtsEvent {
+  const ProcessQueuedJobsEvent();
+}

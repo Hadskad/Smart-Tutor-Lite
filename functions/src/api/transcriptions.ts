@@ -14,6 +14,7 @@ import {
   SonioxError,
   transcribeWithSoniox,
 } from '../utils/soniox-helpers';
+import { generateStudyNotes } from '../utils/openai-helpers';
 
 const REGION = 'europe-west2';
 const app = express();
@@ -321,6 +322,87 @@ app.post('/:id/retry', async (req: Request, res: Response) => {
     }
   } catch (error) {
     functions.logger.error('Error in POST /transcriptions/:id/retry:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// POST /transcriptions/:id/format - Format transcription text into structured note
+app.post('/:id/format', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const transcription = await getTranscription(id);
+
+    if (!transcription) {
+      res.status(404).json({ error: 'Transcription not found' });
+      return;
+    }
+
+    if (!transcription.text || transcription.text.trim().length === 0) {
+      res.status(400).json({
+        error: 'Cannot format note',
+        message: 'Transcription text is empty',
+      });
+      return;
+    }
+
+    try {
+      // Generate structured note using gpt-4.1-mini
+      const studyNote = await generateStudyNotes(transcription.text);
+
+      // Update transcription with structured note, preserving all existing fields
+      const updatedTranscription = {
+        ...transcription,
+        structured_note: {
+          title: studyNote.title,
+          summary: studyNote.summary,
+          key_points: studyNote.keyPoints,
+          action_items: studyNote.actionItems,
+          study_questions: studyNote.studyQuestions,
+        },
+        title: studyNote.title,
+        // Preserve existing fields
+        text: transcription.text,
+        audioPath: transcription.audioPath,
+        storagePath: transcription.storagePath,
+        durationMs: transcription.durationMs,
+        timestamp: transcription.timestamp,
+        confidence: transcription.confidence,
+        metadata: transcription.metadata,
+        status: transcription.status || 'completed',
+      };
+
+      // Save updated transcription to Firestore
+      await saveTranscription(updatedTranscription);
+
+      res.json({
+        success: true,
+        transcription: updatedTranscription,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      
+      functions.logger.error('Error formatting note', {
+        transcriptionId: id,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
+      res.status(500).json({
+        error: 'Failed to format note',
+        message: errorMessage,
+        transcriptionId: id,
+      });
+    }
+  } catch (error) {
+    functions.logger.error('Error in POST /transcriptions/:id/format:', {
+      transcriptionId: req.params.id,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     res.status(500).json({
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error',

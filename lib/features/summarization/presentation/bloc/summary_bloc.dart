@@ -23,6 +23,7 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
     on<SummarizePdfEvent>(_onSummarizePdf);
     on<LoadSummariesEvent>(_onLoadSummaries);
     on<DeleteSummaryEvent>(_onDeleteSummary);
+    on<UpdateSummaryEvent>(_onUpdateSummary);
   }
 
   final SummarizeText _summarizeText;
@@ -166,6 +167,29 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
       ),
       (_) {
         _summaries.removeWhere((s) => s.id == event.summaryId);
+        emit(SummaryInitial(summaries: List.unmodifiable(_summaries)));
+      },
+    );
+  }
+
+  Future<void> _onUpdateSummary(
+    UpdateSummaryEvent event,
+    Emitter<SummaryState> emit,
+  ) async {
+    final result = await _repository.updateSummary(event.summary);
+
+    result.fold(
+      (failure) => emit(
+        SummaryError(
+          message: failure.message ?? 'Failed to update summary',
+          summaries: List.unmodifiable(_summaries),
+        ),
+      ),
+      (updatedSummary) {
+        final index = _summaries.indexWhere((s) => s.id == updatedSummary.id);
+        if (index != -1) {
+          _summaries[index] = updatedSummary;
+        }
         emit(SummaryInitial(summaries: List.unmodifiable(_summaries)));
       },
     );

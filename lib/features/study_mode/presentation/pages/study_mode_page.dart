@@ -1,13 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../injection_container.dart';
 import '../../domain/entities/flashcard.dart';
+import '../../../transcription/domain/repositories/transcription_repository.dart';
+import '../../../summarization/domain/repositories/summary_repository.dart';
 import '../bloc/study_mode_bloc.dart';
 import '../bloc/study_mode_event.dart';
 import '../bloc/study_mode_state.dart';
+import 'flashcard_browse_page.dart';
 import 'flashcard_viewer_page.dart';
 import 'study_progress_page.dart';
+
+// Color Palette matching Home Dashboard
+const Color _kBackgroundColor = Color(0xFF1E1E1E);
+const Color _kCardColor = Color(0xFF333333);
+const Color _kAccentBlue = Color(0xFF00BFFF);
+const Color _kAccentCoral = Color(0xFFFF7043);
+const Color _kWhite = Colors.white;
+const Color _kLightGray = Color(0xFFCCCCCC);
+const Color _kDarkGray = Color(0xFF888888);
 
 class StudyModePage extends StatefulWidget {
   const StudyModePage({super.key});
@@ -18,6 +32,7 @@ class StudyModePage extends StatefulWidget {
 
 class _StudyModePageState extends State<StudyModePage> {
   late final StudyModeBloc _bloc;
+  List<Flashcard> _cachedFlashcards = [];
 
   @override
   void initState() {
@@ -38,11 +53,22 @@ class _StudyModePageState extends State<StudyModePage> {
     return BlocProvider.value(
       value: _bloc,
       child: Scaffold(
+        backgroundColor: _kBackgroundColor,
         appBar: AppBar(
-          title: const Text('Study Mode'),
+          backgroundColor: _kBackgroundColor,
+          elevation: 0,
+          title: const Text(
+            'Study Mode',
+            style: TextStyle(
+              color: _kWhite,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          iconTheme: const IconThemeData(color: _kWhite),
           actions: [
             IconButton(
-              icon: const Icon(Icons.bar_chart),
+              icon: const Icon(Icons.bar_chart, color: _kAccentBlue),
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -64,21 +90,33 @@ class _StudyModePageState extends State<StudyModePage> {
                 ),
               );
             }
+            // Cache flashcards when they're loaded
+            if (state is StudyModeFlashcardsLoaded) {
+              _cachedFlashcards = state.flashcards;
+            }
           },
           builder: (context, state) {
-            if (state is StudyModeLoading) {
-              return const Center(child: CircularProgressIndicator());
+            // Show loading only if we don't have cached flashcards
+            if (state is StudyModeLoading && _cachedFlashcards.isEmpty) {
+              return const Center(
+                child: CircularProgressIndicator(
+                  color: _kAccentBlue,
+                ),
+              );
             }
 
+            // Use cached flashcards if progress is loaded but we have flashcards cached
+            if (state is StudyModeProgressLoaded) {
+              return _FlashcardsList(flashcards: _cachedFlashcards);
+            }
+
+            // Show flashcards when they're loaded
             if (state is StudyModeFlashcardsLoaded) {
               return _FlashcardsList(flashcards: state.flashcards);
             }
 
-            if (state is StudyModeProgressLoaded) {
-              return _FlashcardsList(flashcards: []);
-            }
-
-            return _FlashcardsList(flashcards: []);
+            // Fallback: show cached flashcards if available, otherwise empty
+            return _FlashcardsList(flashcards: _cachedFlashcards);
           },
         ),
       ),
@@ -86,14 +124,96 @@ class _StudyModePageState extends State<StudyModePage> {
   }
 }
 
-class _FlashcardsList extends StatelessWidget {
+class _FlashcardsList extends StatefulWidget {
   const _FlashcardsList({required this.flashcards});
 
   final List<Flashcard> flashcards;
 
   @override
+  State<_FlashcardsList> createState() => _FlashcardsListState();
+}
+
+class _FlashcardsListState extends State<_FlashcardsList> {
+  final Map<String, String> _sourceTitles = {};
+  bool _isLoadingTitles = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSourceTitles();
+  }
+
+  Future<void> _loadSourceTitles() async {
+    final transcriptionRepo = getIt<TranscriptionRepository>();
+    final summaryRepo = getIt<SummaryRepository>();
+
+    // Group flashcards by source
+    final grouped = <String, List<Flashcard>>{};
+    for (final flashcard in widget.flashcards) {
+      final key = '${flashcard.sourceType}_${flashcard.sourceId ?? 'unknown'}';
+      grouped.putIfAbsent(key, () => []).add(flashcard);
+    }
+
+    // Fetch titles for each source
+    final titleMap = <String, String>{};
+    for (final entry in grouped.entries) {
+      final sourceType = entry.value.first.sourceType;
+      final sourceId = entry.value.first.sourceId;
+      final key = entry.key;
+
+      if (sourceId == null) {
+        titleMap[key] = _getDefaultSourceName(sourceType ?? 'unknown');
+        continue;
+      }
+
+      try {
+        String? title;
+        if (sourceType == 'transcription' || sourceType == 'note') {
+          final result = await transcriptionRepo.getTranscription(sourceId);
+          result.fold(
+            (_) => null,
+            (transcription) => title = transcription.title,
+          );
+        } else if (sourceType == 'summary') {
+          final result = await summaryRepo.getSummary(sourceId);
+          result.fold(
+            (_) => null,
+            (summary) => title = summary.title,
+          );
+        }
+
+        titleMap[key] = title?.trim().isNotEmpty == true
+            ? title!
+            : _getDefaultSourceName(sourceType ?? 'unknown');
+      } catch (e) {
+        titleMap[key] = _getDefaultSourceName(sourceType ?? 'unknown');
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _sourceTitles.addAll(titleMap);
+        _isLoadingTitles = false;
+      });
+    }
+  }
+
+  String _getDefaultSourceName(String sourceType) {
+    switch (sourceType) {
+      case 'summary':
+        return 'Summary';
+      case 'note':
+        return 'Note';
+      case 'transcription':
+        return 'Transcription';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (flashcards.isEmpty) {
+    if (widget.flashcards.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -101,20 +221,24 @@ class _FlashcardsList extends StatelessWidget {
             Icon(
               Icons.style,
               size: 64,
-              color:
-                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.7),
+              color: _kDarkGray,
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'No flashcards yet',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: TextStyle(
+                color: _kWhite,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'Generate flashcards from summaries or transcriptions',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+              style: const TextStyle(
+                color: _kLightGray,
+                fontSize: 16,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -124,7 +248,7 @@ class _FlashcardsList extends StatelessWidget {
 
     // Group flashcards by source
     final grouped = <String, List<Flashcard>>{};
-    for (final flashcard in flashcards) {
+    for (final flashcard in widget.flashcards) {
       final key = '${flashcard.sourceType}_${flashcard.sourceId ?? 'unknown'}';
       grouped.putIfAbsent(key, () => []).add(flashcard);
     }
@@ -133,97 +257,463 @@ class _FlashcardsList extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         // Study all button
-        Card(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-          child: ListTile(
-            leading: Icon(
-              Icons.play_circle_filled,
-              size: 48,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            title: const Text(
-              'Study All Flashcards',
-            ),
-            subtitle: Text('${flashcards.length} cards'),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => FlashcardViewerPage(flashcards: flashcards),
-                ),
-              );
-            },
+        Container(
+          decoration: BoxDecoration(
+            color: _kCardColor,
+            borderRadius: BorderRadius.circular(20.0),
           ),
-        ),
-        const SizedBox(height: 16),
-        // Grouped flashcards
-        ...grouped.entries.map((entry) {
-          final sourceType = entry.value.first.sourceType ?? 'unknown';
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: ExpansionTile(
-              leading: Icon(
-                sourceType == 'summary' ? Icons.summarize : Icons.mic,
-              ),
-              title: Text(
-                'From ${sourceType == 'summary' ? 'Summary' : 'Transcription'}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text('${entry.value.length} flashcards'),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ...entry.value.map((flashcard) {
-                  return ListTile(
-                    title: Text(
-                      flashcard.front,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      flashcard.isKnown ? 'Known' : 'Unknown',
-                      style: TextStyle(
-                        color: flashcard.isKnown
-                            ? Theme.of(context).colorScheme.secondary
-                            : Theme.of(context).colorScheme.tertiary,
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _kAccentBlue.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.school,
+                        size: 32,
+                        color: _kAccentBlue,
                       ),
                     ),
-                    trailing: flashcard.reviewCount > 0
-                        ? Chip(
-                            label: Text('${flashcard.reviewCount}x'),
-                            padding: EdgeInsets.zero,
-                          )
-                        : null,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => FlashcardViewerPage(
-                            flashcards: [flashcard],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'All Flashcards',
+                            style: TextStyle(
+                              color: _kWhite,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '${widget.flashcards.length} cards total',
+                            style: const TextStyle(
+                              color: _kLightGray,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => FlashcardBrowsePage(
+                                flashcards: widget.flashcards,
+                                title: 'All Flashcards',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.view_list, color: _kAccentBlue),
+                        label: const Text('Browse',
+                            style: TextStyle(color: _kAccentBlue)),
+                        style: OutlinedButton.styleFrom(
+                          side:
+                              const BorderSide(color: _kAccentBlue, width: 1.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                      );
-                    },
-                  );
-                }),
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => FlashcardViewerPage(
-                            flashcards: entry.value,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => FlashcardViewerPage(
+                                  flashcards: widget.flashcards),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Study'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _kAccentBlue,
+                          foregroundColor: _kWhite,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Study This Set'),
-                  ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        // Section header
+        Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 12),
+          child: const Text(
+            'By Source',
+            style: TextStyle(
+              color: _kLightGray,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        // Simplified grouped flashcards
+        ...grouped.entries.map((entry) {
+          final sourceType = entry.value.first.sourceType ?? 'unknown';
+          final flashcardList = entry.value;
+          final key = entry.key;
+
+          IconData sourceIcon;
+          String sourceName;
+
+          // Get the actual title or fallback to default
+          if (_isLoadingTitles || !_sourceTitles.containsKey(key)) {
+            // Show default name while loading
+            switch (sourceType) {
+              case 'summary':
+                sourceIcon = Icons.summarize;
+                sourceName = 'Summary';
+                break;
+              case 'note':
+                sourceIcon = Icons.note_alt_outlined;
+                sourceName = 'Note';
+                break;
+              case 'transcription':
+                sourceIcon = Icons.mic;
+                sourceName = 'Transcription';
+                break;
+              default:
+                sourceIcon = Icons.style;
+                sourceName = 'Unknown';
+            }
+          } else {
+            // Use the fetched title
+            sourceName =
+                _sourceTitles[key] ?? _getDefaultSourceName(sourceType);
+            switch (sourceType) {
+              case 'summary':
+                sourceIcon = Icons.summarize;
+                break;
+              case 'note':
+                sourceIcon = Icons.note_alt_outlined;
+                break;
+              case 'transcription':
+                sourceIcon = Icons.mic;
+                break;
+              default:
+                sourceIcon = Icons.style;
+            }
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: _kCardColor,
+              borderRadius: BorderRadius.circular(20.0),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _kAccentBlue.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          sourceIcon,
+                          color: _kAccentBlue,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              sourceName,
+                              style: const TextStyle(
+                                color: _kWhite,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '${flashcardList.length} flashcards',
+                              style: const TextStyle(
+                                color: _kLightGray,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Delete icon button
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          size: 20,
+                          color: _kAccentCoral,
+                        ),
+                        onPressed: () {
+                          final title = _isLoadingTitles ||
+                                  !_sourceTitles.containsKey(key)
+                              ? sourceName
+                              : _sourceTitles[key] ?? sourceName;
+                          _showDeleteConfirmationDialog(
+                            context,
+                            flashcardList,
+                            title,
+                          );
+                        },
+                        tooltip: 'Delete flashcards',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            final title = _isLoadingTitles ||
+                                    !_sourceTitles.containsKey(key)
+                                ? sourceName
+                                : _sourceTitles[key] ?? sourceName;
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => FlashcardBrowsePage(
+                                  flashcards: flashcardList,
+                                  title: title,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.view_list,
+                              size: 18, color: _kAccentBlue),
+                          label: const Text('Browse',
+                              style: TextStyle(color: _kAccentBlue)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(
+                                color: _kAccentBlue, width: 1.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => FlashcardViewerPage(
+                                  flashcards: flashcardList,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.play_arrow, size: 18),
+                          label: const Text('Study'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _kAccentBlue,
+                            foregroundColor: _kWhite,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           );
         }),
       ],
     );
+  }
+
+  void _showDeleteConfirmationDialog(
+    BuildContext context,
+    List<Flashcard> flashcards,
+    String sourceName,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _kCardColor,
+        title: const Text(
+          'Delete Flashcards',
+          style: TextStyle(color: _kWhite),
+        ),
+        content: Text(
+          'Are you sure you want to delete ${flashcards.length} flashcards from $sourceName? This action cannot be undone.',
+          style: const TextStyle(color: _kLightGray),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: _kLightGray)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _deleteFlashcards(context, flashcards);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kAccentCoral,
+              foregroundColor: _kWhite,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteFlashcards(
+    BuildContext context,
+    List<Flashcard> flashcards,
+  ) async {
+    final bloc = context.read<StudyModeBloc>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    // Show loading indicator
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text('Deleting ${flashcards.length} flashcards...'),
+            ),
+          ],
+        ),
+        duration: const Duration(seconds: 10),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    // Track reloads - we expect one reload per deletion
+    final completer = Completer<void>();
+    late StreamSubscription subscription;
+    bool hasError = false;
+    String? errorMessage;
+    int expectedReloads = flashcards.length;
+    int reloadCount = 0;
+    Timer? debounceTimer;
+
+    // Listen for state changes
+    subscription = bloc.stream.listen((state) {
+      if (state is StudyModeFlashcardsLoaded) {
+        reloadCount++;
+        // Wait for all deletions to complete (all reloads done)
+        // Use debounce to wait for the final reload
+        debounceTimer?.cancel();
+        debounceTimer = Timer(const Duration(milliseconds: 300), () {
+          if (reloadCount >= expectedReloads && !completer.isCompleted) {
+            subscription.cancel();
+            completer.complete();
+          }
+        });
+      } else if (state is StudyModeError) {
+        // Error occurred
+        hasError = true;
+        errorMessage = state.message;
+        debounceTimer?.cancel();
+        subscription.cancel();
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      }
+    });
+
+    // Delete all flashcards
+    for (final flashcard in flashcards) {
+      bloc.add(DeleteFlashcardEvent(flashcard.id));
+    }
+
+    // Wait for deletions to complete (with timeout)
+    try {
+      await completer.future.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          debounceTimer?.cancel();
+          subscription.cancel();
+          // Force a reload to ensure UI is updated
+          bloc.add(const LoadFlashcardsEvent());
+          throw TimeoutException('Deletion timed out');
+        },
+      );
+
+      // Hide loading snackbar
+      messenger.hideCurrentSnackBar();
+
+      // Show result message
+      if (hasError) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(errorMessage ?? 'Error deleting flashcards'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Deleted ${flashcards.length} flashcards'),
+            backgroundColor: _kAccentBlue,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      subscription.cancel();
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Error deleting flashcards: ${e.toString()}'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }

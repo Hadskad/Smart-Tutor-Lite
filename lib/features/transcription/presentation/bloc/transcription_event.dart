@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import 'package:equatable/equatable.dart';
 
 import '../../../../core/errors/failures.dart';
+import '../../domain/entities/transcription.dart';
 import '../../domain/entities/transcription_job.dart';
 
 abstract class TranscriptionEvent extends Equatable {
@@ -115,4 +116,31 @@ class ConfirmOfflineFallback extends TranscriptionEvent {
 
 class RetryCloudFromFallback extends TranscriptionEvent {
   const RetryCloudFromFallback();
+}
+
+class DeleteTranscription extends TranscriptionEvent {
+  const DeleteTranscription(this.id);
+
+  final String id;
+
+  @override
+  List<Object?> get props => [id];
+}
+
+class UpdateTranscription extends TranscriptionEvent {
+  const UpdateTranscription(this.transcription);
+
+  final Transcription transcription;
+
+  @override
+  List<Object?> get props => [transcription];
+}
+
+class FormatTranscriptionNote extends TranscriptionEvent {
+  const FormatTranscriptionNote(this.id);
+
+  final String id;
+
+  @override
+  List<Object?> get props => [id];
 }

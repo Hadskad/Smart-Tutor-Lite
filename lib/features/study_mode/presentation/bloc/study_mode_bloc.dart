@@ -3,7 +3,6 @@ import 'package:injectable/injectable.dart';
 
 import '../../../../core/utils/logger.dart';
 import '../../../../native_bridge/performance_bridge.dart';
-import '../../domain/entities/flashcard.dart';
 import '../../domain/repositories/study_mode_repository.dart';
 import '../../domain/usecases/generate_flashcards.dart';
 import '../../domain/usecases/get_progress.dart';
@@ -43,13 +42,22 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
   final PerformanceBridge _performanceBridge;
   final AppLogger _logger;
 
-  List<Flashcard> _allFlashcards = [];
   StudyModeSessionActive? _currentSessionState;
+  bool _isGeneratingFlashcards = false;
 
   Future<void> _onGenerateFlashcards(
     GenerateFlashcardsEvent event,
     Emitter<StudyModeState> emit,
   ) async {
+    // Prevent concurrent generation for the same source
+    if (_isGeneratingFlashcards) {
+      emit(const StudyModeError(
+        'Flashcard generation already in progress. Please wait.',
+      ));
+      return;
+    }
+
+    _isGeneratingFlashcards = true;
     emit(const StudyModeLoading());
 
     const segmentId = 'flashcard_generation';
@@ -61,18 +69,19 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
         numFlashcards: event.numFlashcards,
       );
 
-      result.fold(
-        (failure) => emit(
-          StudyModeError(failure.message ?? 'Failed to generate flashcards'),
-        ),
-        (flashcards) {
-          _allFlashcards.addAll(flashcards);
+      await result.fold(
+        (failure) async {
+          emit(StudyModeError(failure.message ?? 'Failed to generate flashcards'));
+        },
+        (flashcards) async {
+          // Repository already handles duplicates, just emit the result
           emit(StudyModeFlashcardsLoaded(
-            flashcards: List.unmodifiable(_allFlashcards),
+            flashcards: List.unmodifiable(flashcards),
           ));
         },
       );
     } finally {
+      _isGeneratingFlashcards = false;
       await _logMetrics(segmentId);
     }
   }
@@ -90,9 +99,8 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
         StudyModeError(failure.message ?? 'Failed to load flashcards'),
       ),
       (flashcards) {
-        _allFlashcards = flashcards;
         emit(StudyModeFlashcardsLoaded(
-          flashcards: List.unmodifiable(_allFlashcards),
+          flashcards: List.unmodifiable(flashcards),
         ));
       },
     );

@@ -12,6 +12,8 @@ abstract class TranscriptionRemoteDataSource {
 
   Future<TranscriptionModel> fetchTranscription(String id);
 
+  Future<TranscriptionModel> formatNote(String id);
+
   Future<void> deleteTranscription(String id);
 }
 
@@ -55,6 +57,22 @@ class TranscriptionRemoteDataSourceImpl
     } catch (error) {
       throw ServerFailure(
           message: 'Failed to fetch transcription', cause: error);
+    }
+  }
+
+  @override
+  Future<TranscriptionModel> formatNote(String id) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '${ApiConstants.transcription}/$id/format',
+        parser: (data) => Map<String, dynamic>.from(data as Map),
+      );
+      // Extract transcription from response
+      final transcriptionData =
+          response['transcription'] as Map<String, dynamic>? ?? response;
+      return TranscriptionModel.fromJson(transcriptionData);
+    } catch (error) {
+      throw ServerFailure(message: 'Failed to format note', cause: error);
     }
   }
 

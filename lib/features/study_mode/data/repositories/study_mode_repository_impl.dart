@@ -44,6 +44,17 @@ class StudyModeRepositoryImpl implements StudyModeRepository {
       }
 
       try {
+        // Check for existing flashcards from this source to prevent duplicates
+        final existingFlashcards = await _localDataSource.getFlashcardsBySource(
+          sourceId: sourceId,
+          sourceType: sourceType,
+        );
+
+        // If flashcards already exist, return them instead of generating new ones
+        if (existingFlashcards.isNotEmpty) {
+          return Right(existingFlashcards.map((m) => m.toEntity()).toList());
+        }
+
         // Generate flashcards from remote API
         final remoteFlashcards = await _remoteDataSource.generateFlashcards(
           sourceId: sourceId,
@@ -401,11 +412,33 @@ class StudyModeRepositoryImpl implements StudyModeRepository {
         return Right(localFlashcards.map((m) => m.toEntity()).toList());
       }
 
-      return Left(failure);
+      // Provide more context about why generation failed
+      String errorMessage;
+      if (failure is NetworkFailure) {
+        errorMessage = 'No internet connection. Please connect to the internet to generate new flashcards.';
+        return Left(NetworkFailure(
+          message: errorMessage,
+          cause: failure.cause,
+        ));
+      } else if (failure is ServerFailure) {
+        errorMessage = 'Failed to generate flashcards: ${failure.message ?? "Server error"}. Please try again later.';
+        return Left(ServerFailure(
+          message: errorMessage,
+          cause: failure.cause,
+        ));
+      } else {
+        errorMessage = failure.message ?? 'Failed to generate flashcards. Please try again.';
+        return Left(ServerFailure(
+          message: errorMessage,
+          cause: failure,
+        ));
+      }
     } catch (error) {
+      // Combine original failure with cache error for better context
+      final originalMessage = failure.message ?? 'Failed to generate flashcards';
       return Left(
         LocalFailure(
-          message: 'Failed to load cached flashcards',
+          message: '$originalMessage. Also failed to load cached flashcards: ${error.toString()}',
           cause: error,
         ),
       );

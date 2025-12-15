@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -43,6 +44,23 @@ const _kAmplitudeSampleInterval = Duration(milliseconds: 500);
 
 enum TranscriptionExecutionMode { online, offline }
 
+/// Represents a queued audio file waiting to be processed
+class QueuedAudio {
+  const QueuedAudio({
+    required this.audioPath,
+    required this.duration,
+    required this.fileSizeBytes,
+    required this.plannedExecutionMode,
+    required this.timestamp,
+  });
+
+  final String audioPath;
+  final Duration duration;
+  final int fileSizeBytes;
+  final TranscriptionExecutionMode plannedExecutionMode;
+  final DateTime timestamp;
+}
+
 @injectable
 class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     with WidgetsBindingObserver {
@@ -72,6 +90,9 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     on<RetryNoteGeneration>(_onRetryNoteGeneration);
     on<ConfirmOfflineFallback>(_onConfirmOfflineFallback);
     on<RetryCloudFromFallback>(_onRetryCloudFromFallback);
+    on<DeleteTranscription>(_onDeleteTranscription);
+    on<UpdateTranscription>(_onUpdateTranscription);
+    on<FormatTranscriptionNote>(_onFormatTranscriptionNote);
 
     add(const LoadTranscriptionPreferences());
 
@@ -95,6 +116,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
   String? _lastRecordedFilePath;
   DateTime? _recordingStartedAt;
   final List<Transcription> _history = <Transcription>[];
+  final Queue<QueuedAudio> _processingQueue = Queue<QueuedAudio>();
   Timer? _recordingTicker;
   StreamSubscription<Amplitude>? _amplitudeSubscription;
   StreamSubscription<Either<Failure, TranscriptionJob>>? _cloudJobSubscription;
@@ -104,7 +126,6 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       TranscriptionExecutionMode.online;
   bool _isInputTooLow = false;
   int _silenceTicks = 0;
-  ConnectivityResult _lastConnectionType = ConnectivityResult.none;
   String? _pendingFallbackAudioPath;
   Duration? _pendingFallbackDuration;
   int? _pendingFallbackSizeBytes;
@@ -127,6 +148,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             message: failure.message ?? 'Failed to load transcriptions',
             history: List.unmodifiable(_history),
             preferences: _preferences,
+            queueLength: _processingQueue.length,
           ),
         ),
         (transcriptions) {
@@ -137,6 +159,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             TranscriptionInitial(
               history: List.unmodifiable(_history),
               preferences: _preferences,
+              queueLength: _processingQueue.length,
             ),
           );
         },
@@ -147,6 +170,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           message: 'Failed to load transcriptions',
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: _processingQueue.length,
         ),
       );
     }
@@ -266,11 +290,13 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
 
   void _emitSnapshot(Emitter<TranscriptionState> emit) {
     final current = state;
+    final queueLen = _processingQueue.length;
     if (current is TranscriptionRecording) {
       emit(
         current.copyWith(
           history: current.history,
           preferences: _preferences,
+          queueLength: queueLen,
         ),
       );
     } else if (current is TranscriptionProcessing) {
@@ -279,6 +305,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           audioPath: current.audioPath,
           history: current.history,
           preferences: _preferences,
+          queueLength: queueLen,
         ),
       );
     } else if (current is TranscriptionSuccess) {
@@ -288,6 +315,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           metrics: current.metrics,
           history: current.history,
           preferences: _preferences,
+          queueLength: queueLen,
         ),
       );
     } else if (current is TranscriptionError) {
@@ -296,6 +324,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           message: current.message,
           history: current.history,
           preferences: _preferences,
+          queueLength: queueLen,
         ),
       );
     } else if (current is CloudTranscriptionState) {
@@ -304,6 +333,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           job: current.job,
           history: current.history,
           preferences: _preferences,
+          queueLength: queueLen,
         ),
       );
     } else if (current is TranscriptionNotice) {
@@ -313,6 +343,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           severity: current.severity,
           history: current.history,
           preferences: _preferences,
+          queueLength: queueLen,
         ),
       );
     } else {
@@ -320,6 +351,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         TranscriptionInitial(
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: queueLen,
         ),
       );
     }
@@ -434,10 +466,6 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     }
   }
 
-  bool _isLargeRecording(Duration duration, int fileSizeBytes) {
-    return duration.inMinutes >= 45 || fileSizeBytes >= 150 * 1024 * 1024;
-  }
-
   void _setFallbackContext({
     required String audioPath,
     required Duration duration,
@@ -478,6 +506,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
               'Original recording is no longer available for offline fallback.',
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: _processingQueue.length,
         ),
       );
       return;
@@ -490,6 +519,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         reason: reason,
         history: List.unmodifiable(_history),
         preferences: _preferences,
+        queueLength: _processingQueue.length,
       ),
     );
   }
@@ -498,24 +528,12 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     StartRecording event,
     Emitter<TranscriptionState> emit,
   ) async {
-    if (_activeCloudJobId != null) {
-      emit(
-        TranscriptionNotice(
-          message:
-              'Cloud transcription still running. Please wait or cancel it before recording again.',
-          severity: TranscriptionNoticeSeverity.warning,
-          history: List.unmodifiable(_history),
-          preferences: _preferences,
-        ),
-      );
-      return;
-    }
+    // Allow recording even when processing is active (queue will handle it)
     if (await _recorder.isRecording()) {
       return;
     }
 
     final connectionType = await _networkInfo.connectionType;
-    _lastConnectionType = connectionType;
     final hasNetwork = connectionType != ConnectivityResult.none;
     _plannedExecutionMode = _resolveExecutionMode(
       hasNetwork: hasNetwork,
@@ -565,6 +583,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           isInputTooLow: false,
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: _processingQueue.length,
         ),
       );
     } catch (error) {
@@ -576,6 +595,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           message: error.toString(),
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: _processingQueue.length,
         ),
       );
     }
@@ -598,6 +618,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             message: 'Recording failed. Please try again.',
             history: List.unmodifiable(_history),
             preferences: _preferences,
+            queueLength: _processingQueue.length,
           ),
         );
         return;
@@ -619,6 +640,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
                 'Recording is too short. Please capture at least ${_kMinRecordingDuration.inSeconds} seconds.',
             history: List.unmodifiable(_history),
             preferences: _preferences,
+            queueLength: _processingQueue.length,
           ),
         );
         return;
@@ -634,6 +656,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
                 'We could not detect any audio. Please make sure the microphone is unobstructed.',
             history: List.unmodifiable(_history),
             preferences: _preferences,
+            queueLength: _processingQueue.length,
           ),
         );
         return;
@@ -655,30 +678,52 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         fileSizeBytes: fileSizeBytes,
       );
 
+      // Check if processing is currently active
+      final isProcessingActive =
+          _activeCloudJobId != null || state is TranscriptionProcessing;
 
-      final useOnline =
-          _plannedExecutionMode == TranscriptionExecutionMode.online;
-      var startedCloud = false;
-      if (useOnline) {
-        final hasNetwork = await _networkInfo.isConnected;
-        if (hasNetwork) {
-          startedCloud = await _startCloudTranscriptionJob(
-            audioPath: audioPath,
-            duration: duration,
-            fileSizeBytes: fileSizeBytes,
-            emit: emit,
-          );
+      if (isProcessingActive) {
+        // Queue the audio for processing later
+        final queuedAudio = QueuedAudio(
+          audioPath: audioPath,
+          duration: duration,
+          fileSizeBytes: fileSizeBytes,
+          plannedExecutionMode: _plannedExecutionMode,
+          timestamp: DateTime.now(),
+        );
+        _processingQueue.add(queuedAudio);
+
+        _emitNotice(
+          emit,
+          'Recording saved. ${_processingQueue.length} audio(s) in queue.',
+          severity: TranscriptionNoticeSeverity.info,
+        );
+      } else {
+        // Process immediately
+        final useOnline =
+            _plannedExecutionMode == TranscriptionExecutionMode.online;
+        var startedCloud = false;
+        if (useOnline) {
+          final hasNetwork = await _networkInfo.isConnected;
+          if (hasNetwork) {
+            startedCloud = await _startCloudTranscriptionJob(
+              audioPath: audioPath,
+              duration: duration,
+              fileSizeBytes: fileSizeBytes,
+              emit: emit,
+            );
+          }
         }
-      }
-      if (!startedCloud) {
-        if (_plannedExecutionMode == TranscriptionExecutionMode.offline) {
-          _startOfflineTranscription(audioPath);
-        } else {
-          _promptOfflineFallback(
-            emit,
-            reason: _lastCloudFailureMessage ??
-                'Cloud transcription is unavailable. Switch to on-device mode to finish faster?',
-          );
+        if (!startedCloud) {
+          if (_plannedExecutionMode == TranscriptionExecutionMode.offline) {
+            _startOfflineTranscription(audioPath);
+          } else {
+            _promptOfflineFallback(
+              emit,
+              reason: _lastCloudFailureMessage ??
+                  'Cloud transcription is unavailable. Switch to on-device mode to finish faster?',
+            );
+          }
         }
       }
     } catch (error) {
@@ -687,6 +732,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           message: 'Failed to stop recording',
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: _processingQueue.length,
         ),
       );
     } finally {
@@ -708,6 +754,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         audioPath: audioPath,
         history: List.unmodifiable(_history),
         preferences: _preferences,
+        queueLength: _processingQueue.length,
       ),
     );
 
@@ -721,13 +768,18 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       );
       final metrics = await _performanceBridge.endSegment('transcription');
       result.fold(
-        (failure) => emit(
-          TranscriptionError(
-            message: failure.message ?? 'Transcription failed',
-            history: List.unmodifiable(_history),
-            preferences: _preferences,
-          ),
-        ),
+        (failure) {
+          emit(
+            TranscriptionError(
+              message: failure.message ?? 'Transcription failed',
+              history: List.unmodifiable(_history),
+              preferences: _preferences,
+              queueLength: _processingQueue.length,
+            ),
+          );
+          // Process next queued audio after error
+          _processNextQueuedAudio(emit);
+        },
         (transcription) {
           _history.insert(0, transcription);
           _deleteRecordedFile();
@@ -737,8 +789,11 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
               history: List.unmodifiable(_history),
               metrics: metrics,
               preferences: _preferences,
+              queueLength: _processingQueue.length,
             ),
           );
+          // Process next queued audio after success
+          _processNextQueuedAudio(emit);
         },
       );
     } catch (error) {
@@ -748,8 +803,11 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           message: 'Unable to process audio',
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: _processingQueue.length,
         ),
       );
+      // Process next queued audio after error
+      _processNextQueuedAudio(emit);
     }
   }
 
@@ -771,6 +829,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         isInputTooLow: event.isInputTooLow,
         history: List.unmodifiable(_history),
         preferences: _preferences,
+        queueLength: _processingQueue.length,
       ),
     );
   }
@@ -830,6 +889,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             job: job,
             history: List.unmodifiable(_history),
             preferences: _preferences,
+            queueLength: _processingQueue.length,
           ),
         );
         return true;
@@ -907,8 +967,11 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
                   'Cloud transcription completed but note is unavailable.',
               history: List.unmodifiable(_history),
               preferences: _preferences,
+              queueLength: _processingQueue.length,
             ),
           );
+          // Process next queued audio after error
+          await _processNextQueuedAudio(emit);
         },
         (transcription) async {
           _history.insert(0, transcription);
@@ -918,9 +981,12 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
               history: List.unmodifiable(_history),
               metrics: null,
               preferences: _preferences,
+              queueLength: _processingQueue.length,
             ),
           );
           await _deleteRecordedFile();
+          // Process next queued audio after success
+          await _processNextQueuedAudio(emit);
         },
       );
     } else if (job.status == TranscriptionJobStatus.error) {
@@ -930,6 +996,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         emit,
         reason: _lastCloudFailureMessage,
       );
+      // Process next queued audio after error
+      await _processNextQueuedAudio(emit);
     }
   }
 
@@ -952,6 +1020,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             job: job,
             history: List.unmodifiable(_history),
             preferences: _preferences,
+            queueLength: _processingQueue.length,
           ),
         );
         if (job.isTerminal) {
@@ -976,12 +1045,17 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           message: failure.message ?? 'Unable to cancel cloud transcription',
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: _processingQueue.length,
         ),
       ),
-      (_) => _emitNotice(
-        emit,
-        'Cloud transcription cancelled.',
-      ),
+      (_) {
+        _emitNotice(
+          emit,
+          'Cloud transcription cancelled.',
+        );
+        // Process next queued audio after cancellation
+        _processNextQueuedAudio(emit);
+      },
     );
   }
 
@@ -996,6 +1070,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           message: failure.message ?? 'Unable to request retry',
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: _processingQueue.length,
         ),
       ),
       (_) => _emitNotice(
@@ -1016,6 +1091,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           message: failure.message ?? 'Unable to retry note generation',
           history: List.unmodifiable(_history),
           preferences: _preferences,
+          queueLength: _processingQueue.length,
         ),
       ),
       (_) => _emitNotice(
@@ -1023,6 +1099,161 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         'Retrying smart note generation...',
       ),
     );
+  }
+
+  Future<void> _onDeleteTranscription(
+    DeleteTranscription event,
+    Emitter<TranscriptionState> emit,
+  ) async {
+    final result = await _transcriptionRepository.deleteTranscription(event.id);
+    await result.fold(
+      (failure) async {
+        emit(
+          TranscriptionError(
+            message: failure.message ?? 'Failed to delete transcription',
+            history: List.unmodifiable(_history),
+            preferences: _preferences,
+            queueLength: _processingQueue.length,
+          ),
+        );
+      },
+      (_) async {
+        // Remove from local history
+        _history.removeWhere((t) => t.id == event.id);
+        // Emit success with updated history
+        emit(
+          TranscriptionInitial(
+            history: List.unmodifiable(_history),
+            preferences: _preferences,
+            queueLength: _processingQueue.length,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _onUpdateTranscription(
+    UpdateTranscription event,
+    Emitter<TranscriptionState> emit,
+  ) async {
+    final result =
+        await _transcriptionRepository.updateTranscription(event.transcription);
+    await result.fold(
+      (failure) async {
+        emit(
+          TranscriptionError(
+            message: failure.message ?? 'Failed to update transcription',
+            history: List.unmodifiable(_history),
+            preferences: _preferences,
+            queueLength: _processingQueue.length,
+          ),
+        );
+      },
+      (updatedTranscription) async {
+        // Update in local history
+        final index =
+            _history.indexWhere((t) => t.id == updatedTranscription.id);
+        if (index != -1) {
+          _history[index] = updatedTranscription;
+        }
+        // Emit success with updated history
+        emit(
+          TranscriptionInitial(
+            history: List.unmodifiable(_history),
+            preferences: _preferences,
+            queueLength: _processingQueue.length,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _onFormatTranscriptionNote(
+    FormatTranscriptionNote event,
+    Emitter<TranscriptionState> emit,
+  ) async {
+    try {
+      // Check network connectivity
+      final hasNetwork = await _networkInfo.isConnected;
+      if (!hasNetwork) {
+        emit(
+          TranscriptionError(
+            message: 'Internet connection required to format note',
+            history: List.unmodifiable(_history),
+            preferences: _preferences,
+            queueLength: _processingQueue.length,
+          ),
+        );
+        return;
+      }
+
+      // Find transcription in history
+      final transcription = _history.firstWhere(
+        (t) => t.id == event.id,
+        orElse: () => throw Exception('Transcription not found'),
+      );
+
+      // Check if transcription has text
+      if (transcription.text.trim().isEmpty) {
+        emit(
+          TranscriptionError(
+            message: 'Cannot format note: transcription text is empty',
+            history: List.unmodifiable(_history),
+            preferences: _preferences,
+            queueLength: _processingQueue.length,
+          ),
+        );
+        return;
+      }
+
+      // Note: We don't emit TranscriptionProcessing state here because:
+      // 1. It requires audioPath which we don't have in this context
+      // 2. The UI already shows a loading indicator based on _isFormatting
+      // 3. Formatting is quick (just an API call) unlike audio processing
+
+      final result = await _transcriptionRepository.formatNote(event.id);
+      await result.fold(
+        (failure) async {
+          emit(
+            TranscriptionError(
+              message: failure.message ?? 'Failed to format note',
+              history: List.unmodifiable(_history),
+              preferences: _preferences,
+              queueLength: _processingQueue.length,
+            ),
+          );
+        },
+        (formattedTranscription) async {
+          // Update in local history
+          final index =
+              _history.indexWhere((t) => t.id == formattedTranscription.id);
+          if (index != -1) {
+            _history[index] = formattedTranscription;
+          } else {
+            _history.insert(0, formattedTranscription);
+          }
+          // Emit success with updated history
+          emit(
+            TranscriptionSuccess(
+              transcription: formattedTranscription,
+              history: List.unmodifiable(_history),
+              metrics: null,
+              preferences: _preferences,
+              queueLength: _processingQueue.length,
+            ),
+          );
+        },
+      );
+    } catch (error) {
+      emit(
+        TranscriptionError(
+          message: error.toString(),
+          history: List.unmodifiable(_history),
+          preferences: _preferences,
+          queueLength: _processingQueue.length,
+        ),
+      );
+    }
   }
 
   String _resolveUserId() {
@@ -1058,8 +1289,63 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         severity: severity,
         history: List.unmodifiable(_history),
         preferences: _preferences,
+        queueLength: _processingQueue.length,
       ),
     );
+  }
+
+  Future<void> _processNextQueuedAudio(Emitter<TranscriptionState> emit) async {
+    // Only process if queue has items and no processing is currently active
+    if (_processingQueue.isEmpty) {
+      return;
+    }
+
+    final isProcessingActive =
+        _activeCloudJobId != null || state is TranscriptionProcessing;
+    if (isProcessingActive) {
+      return;
+    }
+
+    // Dequeue the next audio file
+    final queuedAudio = _processingQueue.removeFirst();
+
+    debugPrint(
+        '[Queue] Processing next audio. ${_processingQueue.length} remaining in queue.');
+
+    // Set fallback context for the queued audio
+    _setFallbackContext(
+      audioPath: queuedAudio.audioPath,
+      duration: queuedAudio.duration,
+      fileSizeBytes: queuedAudio.fileSizeBytes,
+    );
+
+    // Process based on the planned execution mode
+    if (queuedAudio.plannedExecutionMode == TranscriptionExecutionMode.online) {
+      final hasNetwork = await _networkInfo.isConnected;
+      if (hasNetwork) {
+        final startedCloud = await _startCloudTranscriptionJob(
+          audioPath: queuedAudio.audioPath,
+          duration: queuedAudio.duration,
+          fileSizeBytes: queuedAudio.fileSizeBytes,
+          emit: emit,
+        );
+
+        if (!startedCloud) {
+          // Fallback to offline if cloud fails
+          _promptOfflineFallback(
+            emit,
+            reason: _lastCloudFailureMessage ??
+                'Cloud transcription is unavailable. Switch to on-device mode?',
+          );
+        }
+      } else {
+        // No network, fallback to offline
+        _startOfflineTranscription(queuedAudio.audioPath);
+      }
+    } else {
+      // Offline mode
+      _startOfflineTranscription(queuedAudio.audioPath);
+    }
   }
 
   @override

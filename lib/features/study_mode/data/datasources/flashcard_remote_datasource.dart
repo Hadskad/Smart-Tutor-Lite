@@ -39,16 +39,46 @@ class FlashcardRemoteDataSourceImpl implements FlashcardRemoteDataSource {
 
       final flashcardsData = response['flashcards'] as List<dynamic>;
       final flashcards = flashcardsData
-          .map((item) {
+          .asMap()
+          .entries
+          .map((entry) {
+            final index = entry.key;
+            final item = entry.value;
             final fc = item as Map<String, dynamic>;
+            
+            // Validate required fields
+            if (fc['front'] == null || fc['back'] == null) {
+              throw ServerFailure(
+                message: 'Flashcard at index $index is missing required fields (front/back)',
+              );
+            }
+            
+            final front = fc['front'] as String;
+            final back = fc['back'] as String;
+            
+            if (front.trim().isEmpty || back.trim().isEmpty) {
+              throw ServerFailure(
+                message: 'Flashcard at index $index has empty front or back',
+              );
+            }
+            
+            // Generate ID if not provided, using UUID-like format for uniqueness
+            final providedId = fc['id'] as String?;
+            final id = providedId?.isNotEmpty == true
+                ? providedId!
+                : '${sourceId}_fc${index}_${front.hashCode}_${back.hashCode}';
+            
             return FlashcardModel(
-              id: fc['id'] as String? ?? '${sourceId}_${fc['front']}'.hashCode.toString(),
-              front: fc['front'] as String,
-              back: fc['back'] as String,
+              id: id,
+              front: front,
+              back: back,
               sourceId: sourceId,
               sourceType: sourceType,
               createdAt: DateTime.now(),
-              metadata: {'remoteId': fc['id']},
+              metadata: {
+                if (providedId != null) 'remoteId': providedId,
+                'generatedId': providedId == null,
+              },
             );
           })
           .toList();

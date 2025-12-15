@@ -25,6 +25,7 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     on<PauseAudioEvent>(_onPauseAudio);
     on<StopAudioEvent>(_onStopAudio);
     on<DeleteTtsJobEvent>(_onDeleteTtsJob);
+    on<ProcessQueuedJobsEvent>(_onProcessQueuedJobs);
     on<_UpdatePlayingStateEvent>(_onUpdatePlayingState);
   }
 
@@ -35,10 +36,13 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
   final List<TtsJob> _jobs = <TtsJob>[];
   String? _currentAudioUrl;
   StreamSubscription<PlayerState>? _playerStateSubscription;
+  bool _isClosed = false;
 
   @override
   Future<void> close() {
+    _isClosed = true;
     _playerStateSubscription?.cancel();
+    _playerStateSubscription = null;
     _audioPlayer.dispose();
     return super.close();
   }
@@ -47,6 +51,8 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     ConvertPdfToAudioEvent event,
     Emitter<TtsState> emit,
   ) async {
+    if (_isClosed) return; // Guard against operations after bloc is closed
+
     emit(TtsProcessing(jobs: List.unmodifiable(_jobs)));
 
     final result = await _convertPdfToAudio(
@@ -56,6 +62,8 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
 
     result.fold(
       (failure) {
+        if (_isClosed) return; // Guard against emits after bloc is closed
+
         final message = failure.message ?? 'Failed to convert PDF to audio';
         // Check if request was queued
         if (message.contains('queued') || message.contains('Queued')) {
@@ -75,6 +83,8 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
         }
       },
       (job) {
+        if (_isClosed) return; // Guard against emits after bloc is closed
+
         _jobs.insert(0, job);
         emit(
           TtsSuccess(
@@ -90,6 +100,8 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     ConvertTextToAudioEvent event,
     Emitter<TtsState> emit,
   ) async {
+    if (_isClosed) return; // Guard against operations after bloc is closed
+
     emit(TtsProcessing(jobs: List.unmodifiable(_jobs)));
 
     final result = await _convertTextToAudio(
@@ -99,6 +111,8 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
 
     result.fold(
       (failure) {
+        if (_isClosed) return; // Guard against emits after bloc is closed
+
         final message = failure.message ?? 'Failed to convert text to audio';
         // Check if request was queued
         if (message.contains('queued') || message.contains('Queued')) {
@@ -118,6 +132,8 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
         }
       },
       (job) {
+        if (_isClosed) return; // Guard against emits after bloc is closed
+
         _jobs.insert(0, job);
         emit(
           TtsSuccess(
@@ -133,16 +149,22 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     LoadTtsJobsEvent event,
     Emitter<TtsState> emit,
   ) async {
+    if (_isClosed) return; // Guard against operations after bloc is closed
+
     final result = await _repository.getAllTtsJobs();
 
     result.fold(
-      (failure) => emit(
-        TtsError(
-          message: failure.message ?? 'Failed to load TTS jobs',
-          jobs: List.unmodifiable(_jobs),
-        ),
-      ),
+      (failure) {
+        if (_isClosed) return; // Guard against emits after bloc is closed
+        emit(
+          TtsError(
+            message: failure.message ?? 'Failed to load TTS jobs',
+            jobs: List.unmodifiable(_jobs),
+          ),
+        );
+      },
       (jobs) {
+        if (_isClosed) return; // Guard against emits after bloc is closed
         _jobs.clear();
         _jobs.addAll(jobs);
         emit(TtsInitial(jobs: List.unmodifiable(_jobs)));
@@ -154,6 +176,8 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     PlayAudioEvent event,
     Emitter<TtsState> emit,
   ) async {
+    if (_isClosed) return; // Guard against operations after bloc is closed
+
     try {
       if (_currentAudioUrl != event.audioUrl) {
         await _audioPlayer.stop();
@@ -166,6 +190,8 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
       _playerStateSubscription?.cancel();
       _playerStateSubscription = _audioPlayer.onPlayerStateChanged.listen(
         (state) {
+          if (_isClosed) return; // Guard against emits after bloc is closed
+
           if (state == PlayerState.playing) {
             add(const _UpdatePlayingStateEvent(isPlaying: true));
           } else if (state == PlayerState.paused) {
@@ -176,20 +202,24 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
         },
       );
 
-      emit(
-        TtsPlaying(
-          currentAudioUrl: event.audioUrl,
-          isPlaying: true,
-          jobs: List.unmodifiable(_jobs),
-        ),
-      );
+      if (!_isClosed) {
+        emit(
+          TtsPlaying(
+            currentAudioUrl: event.audioUrl,
+            isPlaying: true,
+            jobs: List.unmodifiable(_jobs),
+          ),
+        );
+      }
     } catch (error) {
-      emit(
-        TtsError(
-          message: 'Failed to play audio: $error',
-          jobs: List.unmodifiable(_jobs),
-        ),
-      );
+      if (!_isClosed) {
+        emit(
+          TtsError(
+            message: 'Failed to play audio: $error',
+            jobs: List.unmodifiable(_jobs),
+          ),
+        );
+      }
     }
   }
 
@@ -197,9 +227,11 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     PauseAudioEvent event,
     Emitter<TtsState> emit,
   ) async {
+    if (_isClosed) return; // Guard against operations after bloc is closed
+
     try {
       await _audioPlayer.pause();
-      if (state is TtsPlaying) {
+      if (!_isClosed && state is TtsPlaying) {
         emit(
           TtsPlaying(
             currentAudioUrl: (state as TtsPlaying).currentAudioUrl,
@@ -209,12 +241,14 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
         );
       }
     } catch (error) {
-      emit(
-        TtsError(
-          message: 'Failed to pause audio: $error',
-          jobs: List.unmodifiable(_jobs),
-        ),
-      );
+      if (!_isClosed) {
+        emit(
+          TtsError(
+            message: 'Failed to pause audio: $error',
+            jobs: List.unmodifiable(_jobs),
+          ),
+        );
+      }
     }
   }
 
@@ -222,18 +256,26 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     StopAudioEvent event,
     Emitter<TtsState> emit,
   ) async {
+    if (_isClosed) return; // Guard against operations after bloc is closed
+
     try {
       await _audioPlayer.stop();
       _currentAudioUrl = null;
       _playerStateSubscription?.cancel();
-      emit(TtsInitial(jobs: List.unmodifiable(_jobs)));
+      _playerStateSubscription = null;
+
+      if (!_isClosed) {
+        emit(TtsInitial(jobs: List.unmodifiable(_jobs)));
+      }
     } catch (error) {
-      emit(
-        TtsError(
-          message: 'Failed to stop audio: $error',
-          jobs: List.unmodifiable(_jobs),
-        ),
-      );
+      if (!_isClosed) {
+        emit(
+          TtsError(
+            message: 'Failed to stop audio: $error',
+            jobs: List.unmodifiable(_jobs),
+          ),
+        );
+      }
     }
   }
 
@@ -241,26 +283,58 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     DeleteTtsJobEvent event,
     Emitter<TtsState> emit,
   ) async {
+    if (_isClosed) return; // Guard against operations after bloc is closed
+
     final result = await _repository.deleteTtsJob(event.jobId);
 
     result.fold(
-      (failure) => emit(
-        TtsError(
-          message: failure.message ?? 'Failed to delete TTS job',
-          jobs: List.unmodifiable(_jobs),
-        ),
-      ),
+      (failure) {
+        if (_isClosed) return; // Guard against emits after bloc is closed
+        emit(
+          TtsError(
+            message: failure.message ?? 'Failed to delete TTS job',
+            jobs: List.unmodifiable(_jobs),
+          ),
+        );
+      },
       (_) {
+        if (_isClosed) return; // Guard against emits after bloc is closed
         _jobs.removeWhere((j) => j.id == event.jobId);
         emit(TtsInitial(jobs: List.unmodifiable(_jobs)));
       },
     );
   }
 
+  Future<void> _onProcessQueuedJobs(
+    ProcessQueuedJobsEvent event,
+    Emitter<TtsState> emit,
+  ) async {
+    if (_isClosed) return; // Guard against operations after bloc is closed
+
+    emit(TtsProcessing(jobs: List.unmodifiable(_jobs)));
+
+    try {
+      await _repository.processQueuedTtsJobs();
+      // Reload jobs to show newly processed ones
+      add(const LoadTtsJobsEvent());
+    } catch (error) {
+      if (!_isClosed) {
+        emit(
+          TtsError(
+            message: 'Failed to process queued jobs: $error',
+            jobs: List.unmodifiable(_jobs),
+          ),
+        );
+      }
+    }
+  }
+
   void _onUpdatePlayingState(
     _UpdatePlayingStateEvent event,
     Emitter<TtsState> emit,
   ) {
+    if (_isClosed) return; // Guard against emits after bloc is closed
+
     if (state is TtsPlaying) {
       final currentState = state as TtsPlaying;
       emit(
@@ -283,4 +357,3 @@ class _UpdatePlayingStateEvent extends TtsEvent {
   @override
   List<Object?> get props => [isPlaying];
 }
-

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/profile/presentation/pages/profile_page.dart';
 import '../features/quiz/presentation/pages/quiz_creation_page.dart';
 import '../features/study_mode/presentation/pages/study_mode_page.dart';
 import '../features/summarization/presentation/pages/summary_page.dart';
@@ -12,6 +13,7 @@ class AppRoutes {
   static const String quiz = '/quiz';
   static const String tts = '/tts';
   static const String studyMode = '/study-mode';
+  static const String profile = '/profile';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -39,6 +41,11 @@ class AppRoutes {
       case studyMode:
         return MaterialPageRoute(
           builder: (_) => const StudyModePage(),
+          settings: settings,
+        );
+      case profile:
+        return MaterialPageRoute(
+          builder: (_) => const ProfilePage(),
           settings: settings,
         );
       default:

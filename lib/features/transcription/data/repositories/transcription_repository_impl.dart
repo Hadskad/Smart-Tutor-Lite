@@ -87,8 +87,7 @@ class TranscriptionRepositoryImpl implements TranscriptionRepository {
         );
       }
       try {
-        final remoteModel =
-            await _remoteDataSource.transcribeAudio(audioPath);
+        final remoteModel = await _remoteDataSource.transcribeAudio(audioPath);
         await _cacheTranscription(remoteModel);
         return Right(remoteModel.toEntity());
       } on Failure catch (remoteFailure) {
@@ -165,6 +164,41 @@ class TranscriptionRepositoryImpl implements TranscriptionRepository {
     } catch (error) {
       return Left(LocalFailure(
           message: 'Unable to delete transcription', cause: error));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Transcription>> updateTranscription(
+      Transcription transcription) async {
+    try {
+      final model = TranscriptionModel.fromEntity(transcription);
+      await _cacheTranscription(model);
+      if (await _networkInfo.isConnected) {
+        // Optionally sync to remote if endpoint exists
+        // await _remoteDataSource.updateTranscription(model);
+      }
+      return Right(transcription);
+    } catch (error) {
+      return Left(LocalFailure(
+          message: 'Unable to update transcription', cause: error));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Transcription>> formatNote(String id) async {
+    try {
+      if (!await _networkInfo.isConnected) {
+        return const Left(NetworkFailure(
+            message: 'Internet connection required to format note'));
+      }
+      final formattedModel = await _remoteDataSource.formatNote(id);
+      await _cacheTranscription(formattedModel);
+      return Right(formattedModel.toEntity());
+    } on Failure catch (failure) {
+      return Left(failure);
+    } catch (error) {
+      return Left(
+          ServerFailure(message: 'Failed to format note', cause: error));
     }
   }
 }

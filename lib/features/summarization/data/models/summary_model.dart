@@ -8,6 +8,7 @@ class SummaryModel extends Summary {
     super.sourceId,
     super.metadata = const <String, dynamic>{},
     required super.createdAt,
+    super.title,
   });
 
   factory SummaryModel.fromJson(Map<String, dynamic> json) {
@@ -21,6 +22,7 @@ class SummaryModel extends Summary {
       ),
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
+      title: json['title'] as String?,
     );
   }
 
@@ -32,6 +34,7 @@ class SummaryModel extends Summary {
       'summaryText': summaryText,
       'metadata': metadata,
       'createdAt': createdAt.toIso8601String(),
+      if (title != null) 'title': title,
     };
   }
 
@@ -42,6 +45,7 @@ class SummaryModel extends Summary {
     String? summaryText,
     Map<String, dynamic>? metadata,
     DateTime? createdAt,
+    String? title,
   }) {
     return SummaryModel(
       id: id ?? this.id,
@@ -50,6 +54,7 @@ class SummaryModel extends Summary {
       summaryText: summaryText ?? this.summaryText,
       metadata: metadata ?? this.metadata,
       createdAt: createdAt ?? this.createdAt,
+      title: title ?? this.title,
     );
   }
 
@@ -61,6 +66,7 @@ class SummaryModel extends Summary {
       summaryText: entity.summaryText,
       metadata: Map<String, dynamic>.from(entity.metadata),
       createdAt: entity.createdAt,
+      title: entity.title,
     );
   }
 
@@ -72,6 +78,7 @@ class SummaryModel extends Summary {
       summaryText: summaryText,
       metadata: metadata,
       createdAt: createdAt,
+      title: title,
     );
   }
 }

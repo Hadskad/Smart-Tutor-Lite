@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
-
 import '../../../../injection_container.dart';
 import '../../../study_mode/presentation/bloc/study_mode_bloc.dart';
 import '../../../study_mode/presentation/bloc/study_mode_event.dart';
+import '../../../study_mode/presentation/bloc/study_mode_state.dart';
 import '../../domain/entities/transcription.dart';
 import '../../domain/entities/transcription_job.dart';
 import '../bloc/transcription_bloc.dart';
 import '../bloc/transcription_event.dart';
 import '../bloc/transcription_state.dart';
 import '../widgets/audio_recorder_widget.dart';
-import 'transcription_detail_page.dart';
+import '../widgets/note_list_card.dart';
+import 'note_detail_page.dart';
 
 // --- Color Palette (matching home dashboard) ---
 const Color _kBackgroundColor = Color(0xFF1E1E1E);
@@ -31,231 +31,394 @@ class TranscriptionPage extends StatefulWidget {
 
 class _TranscriptionPageState extends State<TranscriptionPage> {
   late final TranscriptionBloc _bloc;
+  late final StudyModeBloc _studyModeBloc;
   bool _isFallbackDialogVisible = false;
+  int _previousHistoryLength = 0;
 
   @override
   void initState() {
     super.initState();
     _bloc = getIt<TranscriptionBloc>();
+    _studyModeBloc = getIt<StudyModeBloc>();
     _bloc.add(const LoadTranscriptions());
   }
 
   @override
   void dispose() {
     _bloc.close();
+    _studyModeBloc.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: _bloc,
-      child: BlocConsumer<TranscriptionBloc, TranscriptionState>(
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: _bloc),
+        BlocProvider.value(value: _studyModeBloc),
+      ],
+      child: BlocListener<StudyModeBloc, StudyModeState>(
         listener: (context, state) {
-          final messenger = ScaffoldMessenger.of(context);
-          if (state is TranscriptionError) {
-            messenger.showSnackBar(
+          if (state is StudyModeFlashcardsLoaded) {
+            // Close any open dialogs
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(state.message),
-                backgroundColor: Theme.of(context).colorScheme.error,
+                content: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '${state.flashcards.length} flashcards generated!',
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+                action: SnackBarAction(
+                  label: 'View',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/study-mode');
+                  },
+                ),
+              ),
+            );
+          } else if (state is StudyModeError) {
+            // Close any open dialogs
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(state.message)),
+                  ],
+                ),
+                backgroundColor: Colors.red,
                 behavior: SnackBarBehavior.floating,
               ),
             );
-          } else if (state is TranscriptionSuccess) {
-            final metrics = state.metrics;
-            final message = metrics == null
-                ? 'Transcription completed'
-                : 'Transcribed in ${metrics.durationMs}ms';
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(message),
-                backgroundColor: Theme.of(context).colorScheme.secondary,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          } else if (state is TranscriptionNotice) {
-            final color = state.severity == TranscriptionNoticeSeverity.warning
-                ? Theme.of(context).colorScheme.tertiary
-                : Theme.of(context).colorScheme.primary;
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: color,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          } else if (state is TranscriptionFallbackPrompt) {
-            _showFallbackDialog(state);
           }
         },
-        builder: (context, state) {
-          return Scaffold(
-            backgroundColor: _kBackgroundColor,
-            appBar: AppBar(
-              backgroundColor: _kCardColor,
-              title: const Text(
-                'Automatic Notes Taker',
-                style: TextStyle(color: _kWhite),
-              ),
-              iconTheme: const IconThemeData(color: _kWhite),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.history, color: _kWhite),
-                  onPressed: () {
-                    // Placeholder for history filter or settings
-                  },
-                  tooltip: 'History',
+        child: BlocConsumer<TranscriptionBloc, TranscriptionState>(
+          listener: (context, state) {
+            final messenger = ScaffoldMessenger.of(context);
+            if (state is TranscriptionError) {
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  behavior: SnackBarBehavior.floating,
                 ),
-              ],
-            ),
-            body: SafeArea(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Enhanced Recorder Widget Container
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: _kCardColor,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _kAccentBlue.withOpacity(0.1),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
+              );
+            } else if (state is TranscriptionSuccess) {
+              final metrics = state.metrics;
+              final message = metrics == null
+                  ? 'Transcription completed'
+                  : 'Transcribed in ${metrics.durationMs}ms';
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(message),
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+              _previousHistoryLength = state.history.length;
+            } else if (state is TranscriptionNotice) {
+              final color =
+                  state.severity == TranscriptionNoticeSeverity.warning
+                      ? Theme.of(context).colorScheme.tertiary
+                      : Theme.of(context).colorScheme.primary;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: color,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            } else if (state is TranscriptionFallbackPrompt) {
+              _showFallbackDialog(state);
+            } else if (state is TranscriptionInitial) {
+              // Detect deletion by checking if history length decreased
+              if (_previousHistoryLength > 0 &&
+                  state.history.length < _previousHistoryLength) {
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: const Text('Note deleted successfully'),
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+              _previousHistoryLength = state.history.length;
+            }
+          },
+          builder: (context, state) {
+            return Scaffold(
+              backgroundColor: _kBackgroundColor,
+              appBar: AppBar(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                backgroundColor: _kCardColor,
+                title: const Text(
+                  'Automatic Notes Taker',
+                  style: TextStyle(
+                      color: _kWhite,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 25),
+                ),
+                iconTheme: const IconThemeData(color: _kWhite),
+              ),
+              body: SafeArea(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 600),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Enhanced Recorder Widget Container
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: _kCardColor,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _kAccentBlue.withOpacity(0.1),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: const AudioRecorderWidget(),
+                            ),
+                            const SizedBox(height: 24),
+                            _ModeToggle(
+                              value: state.preferences.alwaysUseOffline,
+                            ),
+                            const SizedBox(height: 8),
+                            _FastModelToggle(
+                              value: state.preferences.useFastWhisperModel,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildStatus(state),
+                            const SizedBox(height: 24),
+                            Row(
+                              children: [
+                                Text(
+                                  'Recent Notes',
+                                  style: const TextStyle(
+                                    color: _kWhite,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
+                                const Spacer(),
                               ],
                             ),
-                            child: const AudioRecorderWidget(),
-                          ),
-                          const SizedBox(height: 24),
-                          _ModeToggle(
-                            value: state.preferences.alwaysUseOffline,
-                          ),
-                          const SizedBox(height: 8),
-                          _FastModelToggle(
-                            value: state.preferences.useFastWhisperModel,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildStatus(state),
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              Text(
-                                'Recent Notes',
-                                style: const TextStyle(
-                                  color: _kWhite,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'You can leave this page—jobs keep running in the background and appear here when ready.',
+                              style: const TextStyle(
+                                color: _kLightGray,
+                                fontSize: 14,
                               ),
-                              const Spacer(),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'You can leave this page—jobs keep running in the background and appear here when ready.',
-                            style: const TextStyle(
-                              color: _kLightGray,
-                              fontSize: 14,
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildHistory(state.history),
-                        ],
+                            const SizedBox(height: 16),
+                            _buildHistory(state.history),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _buildStatus(TranscriptionState state) {
+    final queueLength = state.queueLength;
+    final hasQueue = queueLength > 0;
+
     if (state is CloudTranscriptionState) {
-      return _CloudTranscriptionStatus(job: state.job);
+      return Column(
+        children: [
+          _CloudTranscriptionStatus(job: state.job),
+          if (hasQueue) ...[
+            const SizedBox(height: 12),
+            _QueueStatusContainer(queueLength: queueLength),
+          ],
+        ],
+      );
     }
     if (state is TranscriptionRecording) {
-      return _StatusContainer(
-        icon: Icons.mic,
-        color: _kAccentCoral,
-        label: 'Recording in progress...',
+      return Column(
+        children: [
+          _StatusContainer(
+            icon: Icons.mic,
+            color: _kAccentCoral,
+            label: 'Recording in progress...',
+          ),
+          if (hasQueue) ...[
+            const SizedBox(height: 12),
+            _QueueStatusContainer(queueLength: queueLength),
+          ],
+        ],
       );
     }
     if (state is TranscriptionProcessing) {
-      return _StatusContainer(
-        icon: Icons.cloud_upload_rounded,
-        color: _kAccentBlue,
-        label: 'Processing audio...',
+      return Column(
+        children: [
+          _StatusContainer(
+            icon: Icons.cloud_upload_rounded,
+            color: _kAccentBlue,
+            label: hasQueue
+                ? 'Processing audio... ($queueLength in queue)'
+                : 'Processing audio...',
+          ),
+          if (hasQueue) ...[
+            const SizedBox(height: 12),
+            _QueueStatusContainer(queueLength: queueLength),
+          ],
+        ],
       );
     }
     if (state is TranscriptionSuccess) {
-      return _StatusContainer(
-        icon: Icons.check_circle_rounded,
-        color: _kAccentBlue,
-        label: 'Transcription ready',
+      return Column(
+        children: [
+          _StatusContainer(
+            icon: Icons.check_circle_rounded,
+            color: _kAccentBlue,
+            label: 'Transcription ready',
+          ),
+          if (hasQueue) ...[
+            const SizedBox(height: 12),
+            _QueueStatusContainer(queueLength: queueLength),
+          ],
+        ],
       );
     }
     if (state is TranscriptionNotice) {
       final color = state.severity == TranscriptionNoticeSeverity.warning
           ? _kAccentCoral
           : _kAccentBlue;
-      return _StatusContainer(
-        icon: Icons.info_outline_rounded,
-        color: color,
-        label: state.message,
+      return Column(
+        children: [
+          _StatusContainer(
+            icon: Icons.info_outline_rounded,
+            color: color,
+            label: state.message,
+          ),
+          if (hasQueue) ...[
+            const SizedBox(height: 12),
+            _QueueStatusContainer(queueLength: queueLength),
+          ],
+        ],
       );
     }
     if (state is TranscriptionError) {
-      return _StatusContainer(
-        icon: Icons.error_outline_rounded,
-        color: _kAccentCoral,
-        label: state.message,
+      return Column(
+        children: [
+          _StatusContainer(
+            icon: Icons.error_outline_rounded,
+            color: _kAccentCoral,
+            label: state.message,
+          ),
+          if (hasQueue) ...[
+            const SizedBox(height: 12),
+            _QueueStatusContainer(queueLength: queueLength),
+          ],
+        ],
       );
     }
     return const SizedBox.shrink();
   }
 
   void _generateFlashcards(String sourceId, String sourceType) {
-    final studyModeBloc = getIt<StudyModeBloc>();
-    studyModeBloc.add(GenerateFlashcardsEvent(
+    _studyModeBloc.add(GenerateFlashcardsEvent(
       sourceId: sourceId,
       sourceType: sourceType,
       numFlashcards: 10,
     ));
 
+    // Show loading dialog
     showDialog(
       context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false, // Prevent closing during generation
+        child: AlertDialog(
+          title: const Text('Generating Flashcards'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text(
+                'Your flashcards are being created. Please wait...',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // Note: Generation will continue in background
+              },
+              child: const Text('Dismiss'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDeleteConfirmationDialog(
+    BuildContext context,
+    Transcription transcription,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Generating Flashcards'),
+        title: const Text('Delete Note'),
         content: const Text(
-          'Your flashcards are being created. Visit Study Mode to practice once they are ready.',
+          'Are you sure you want to delete this note? This action cannot be undone.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Dismiss'),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/study-mode');
-            },
-            child: const Text('Go to Study Mode'),
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: _kAccentCoral,
+            ),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
+
+    if (confirmed == true && context.mounted) {
+      _bloc.add(DeleteTranscription(transcription.id));
+    }
   }
 
   Widget _buildHistory(List<Transcription> history) {
@@ -298,128 +461,27 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final transcription = history[index];
-        return Container(
-          margin: EdgeInsets.zero,
-          decoration: BoxDecoration(
-            color: _kCardColor,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => TranscriptionDetailPage(
-                    transcription: transcription,
-                  ),
+        return NoteListCard(
+          transcription: transcription,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NoteDetailPage(
+                  transcription: transcription,
                 ),
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: _kAccentBlue.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.graphic_eq,
-                          color: _kAccentBlue,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              DateFormat.yMMMd()
-                                  .format(transcription.timestamp),
-                              style: const TextStyle(
-                                color: _kWhite,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _kAccentBlue.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '${(transcription.confidence * 100).toStringAsFixed(0)}% Accuracy',
-                                style: const TextStyle(
-                                  color: _kAccentBlue,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.play_circle_outline_rounded),
-                        color: _kAccentBlue,
-                        tooltip: 'Play Audio',
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Audio playback coming soon.'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    transcription.text,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _kLightGray,
-                      fontSize: 16,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Divider(
-                    height: 1,
-                    color: _kDarkGray.withOpacity(0.3),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      icon: const Icon(Icons.style_outlined, size: 18),
-                      label: const Text('Create Flashcards'),
-                      onPressed: () {
-                        _generateFlashcards(transcription.id, 'transcription');
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: _kAccentBlue,
-                      ),
-                    ),
-                  ),
-                ],
               ),
-            ),
-          ),
+            );
+          },
+          onEditTitle: () {
+            _showEditTitleDialog(context, transcription);
+          },
+          onDelete: () {
+            _showDeleteConfirmationDialog(context, transcription);
+          },
+          onCreateFlashcards: () {
+            _generateFlashcards(transcription.id, 'transcription');
+          },
         );
       },
     );
@@ -466,6 +528,72 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
     if (mounted) {
       _isFallbackDialogVisible = false;
     }
+  }
+
+  void _showEditTitleDialog(BuildContext context, Transcription transcription) {
+    final textController =
+        TextEditingController(text: transcription.title ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _kCardColor,
+        title: const Text(
+          'Edit Title',
+          style: TextStyle(color: _kWhite),
+        ),
+        content: TextField(
+          controller: textController,
+          style: const TextStyle(color: Colors.black),
+          decoration: InputDecoration(
+            hintText: 'Enter title',
+            hintStyle: TextStyle(color: _kDarkGray),
+            border: OutlineInputBorder(
+              borderSide: BorderSide(color: _kAccentBlue),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: _kAccentBlue),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: _kAccentBlue, width: 2),
+            ),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: _kAccentBlue),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newTitle = textController.text.trim();
+              final updatedTranscription = Transcription(
+                id: transcription.id,
+                text: transcription.text,
+                audioPath: transcription.audioPath,
+                duration: transcription.duration,
+                timestamp: transcription.timestamp,
+                confidence: transcription.confidence,
+                metadata: transcription.metadata,
+                title: newTitle.isEmpty ? null : newTitle,
+                structuredNote: transcription.structuredNote,
+              );
+              _bloc.add(UpdateTranscription(updatedTranscription));
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kAccentBlue,
+              foregroundColor: _kWhite,
+            ),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -748,5 +876,42 @@ class _CloudTranscriptionStatus extends StatelessWidget {
       return '';
     }
     return ' ($clamped%)';
+  }
+}
+
+class _QueueStatusContainer extends StatelessWidget {
+  const _QueueStatusContainer({required this.queueLength});
+
+  final int queueLength;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: _kAccentBlue.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _kAccentBlue.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.queue_music_rounded, color: _kAccentBlue, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '$queueLength audio${queueLength > 1 ? 's' : ''} in queue',
+              style: const TextStyle(
+                color: _kAccentBlue,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

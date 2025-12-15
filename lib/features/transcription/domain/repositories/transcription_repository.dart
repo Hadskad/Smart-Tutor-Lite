@@ -15,4 +15,9 @@ abstract class TranscriptionRepository {
   Future<Either<Failure, List<Transcription>>> getAllTranscriptions();
 
   Future<Either<Failure, Unit>> deleteTranscription(String id);
+
+  Future<Either<Failure, Transcription>> updateTranscription(
+      Transcription transcription);
+
+  Future<Either<Failure, Transcription>> formatNote(String id);
 }

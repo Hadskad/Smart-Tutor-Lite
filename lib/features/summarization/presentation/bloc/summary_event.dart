@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../domain/entities/summary.dart';
+
 abstract class SummaryEvent extends Equatable {
   const SummaryEvent();
 
@@ -40,5 +42,14 @@ class DeleteSummaryEvent extends SummaryEvent {
 
   @override
   List<Object?> get props => [summaryId];
+}
+
+class UpdateSummaryEvent extends SummaryEvent {
+  const UpdateSummaryEvent(this.summary);
+
+  final Summary summary;
+
+  @override
+  List<Object?> get props => [summary];
 }
 

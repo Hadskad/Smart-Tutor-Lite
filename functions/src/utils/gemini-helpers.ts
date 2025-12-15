@@ -1,6 +1,6 @@
-import { openai } from '../config/openai';
+import { genAI } from '../config/gemini';
 
-const GPT_MODEL = 'gpt-4.1-mini';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 // Study-notes specific config
 const STUDY_NOTES_TIMEOUT_MS = 10 * 60 * 1000; // ~10 minutes
@@ -39,7 +39,7 @@ export interface GenerationMeta {
   sanitized: boolean;
   warnings?: string[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  usage?: any; // raw usage object from OpenAI (optional)
+  usage?: any; // raw usage object from Gemini (optional)
 }
 
 export interface GenerationResult {
@@ -48,7 +48,7 @@ export interface GenerationResult {
 }
 
 /**
- * Summarize text using OpenAI
+ * Summarize text using Gemini
  */
 export async function summarizeText(options: SummarizeOptions): Promise<string> {
   const { text, isPdf = false } = options;
@@ -74,29 +74,30 @@ Create a comprehensive, well-structured summary that a student can study from ef
     userPrompt = `Summarize the following text. Keep the length appropriate to the content. If it is long, produce a detailed multi-paragraph summary. If it is short, use a concise paragraph.\n\nText:\n${text}`;
   }
 
-  const response = await openai.chat.completions.create({
-    model: GPT_MODEL,
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+  
+  const result = await model.generateContent({
+    contents: [
       {
         role: 'user',
-        content: userPrompt,
-      },
+        parts: [
+          { text: `${systemPrompt}\n\n${userPrompt}` }
+        ]
+      }
     ],
-    temperature: 0.3,
+    generationConfig: {
+      temperature: 0.3,
+    },
   });
 
-  const summary = extractResponseText(response);
+  const summary = result.response.text();
   if (!summary) throw new Error('Summary generation failed: empty response');
   return summary;
 }
 
 
 /**
- * Generate quiz questions from content using OpenAI
+ * Generate quiz questions from content using Gemini
  */
 export async function generateQuiz(
   options: GenerateQuizOptions
@@ -110,12 +111,7 @@ export async function generateQuiz(
 }> {
   const { content, numQuestions, difficulty } = options;
 
-  const response = await openai.chat.completions.create({
-    model: GPT_MODEL,
-    messages: [
-      {
-        role: 'system',
-        content: `You generate high-quality multiple-choice questions directly from the given content. Follow these rules strictly:
+  const systemPrompt = `You generate high-quality multiple-choice questions directly from the given content. Follow these rules strictly:
 
 1. Every question must be fully answerable ONLY using the provided content.
 2. No invented facts, no hallucinations.
@@ -124,11 +120,9 @@ export async function generateQuiz(
 5. Correct answer index must match the correct option.
 6. Difficulty must match the requested level ("easy", "medium", "hard").
 7. Output ONLY valid JSON. No explanations, no Markdown, no text outside the JSON.
-8. Keep questions clear, unambiguous, and well-written.`,
-      },
-      {
-        role: 'user',
-        content: `Generate ${numQuestions} ${difficulty} multiple-choice questions based strictly on the text below.
+8. Keep questions clear, unambiguous, and well-written.`;
+
+  const userPrompt = `Generate ${numQuestions} ${difficulty} multiple-choice questions based strictly on the text below.
 Return a JSON array of objects with this exact structure:
 
 [
@@ -141,13 +135,25 @@ Return a JSON array of objects with this exact structure:
 ]
 
 CONTENT:
-${content}`,
-      },
+${content}`;
+
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+  
+  const result = await model.generateContent({
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { text: `${systemPrompt}\n\n${userPrompt}` }
+        ]
+      }
     ],
-    temperature: 0.2,
+    generationConfig: {
+      temperature: 0.2,
+    },
   });
 
-  const text = extractResponseText(response);
+  const text = result.response.text();
   if (!text) throw new Error('Failed to generate quiz');
 
   try {
@@ -166,52 +172,117 @@ ${content}`,
 
 
 /**
- * Generate flashcards from content using OpenAI
+ * Generate flashcards from content using Gemini
  */
 export async function generateFlashcards(
   options: GenerateFlashcardsOptions
 ): Promise<Array<{ front: string; back: string }>> {
   const { content, numFlashcards } = options;
 
-  const prompt = `Generate ${numFlashcards} flashcards based on the following content.
-Return a JSON array with this structure:
+  const systemPrompt = `You are an expert educational assistant specialized in creating effective flashcards for active recall and spaced repetition learning. Follow these principles:
+
+1. Extract key concepts, definitions, and important facts from the content
+2. Front of card: Clear, concise question or key term
+3. Back of card: Complete, informative answer or definition
+4. Focus on atomic knowledge - one concept per card
+5. Avoid overly complex or compound questions
+6. Use clear, student-friendly language
+7. Ensure flashcards are directly answerable from the given content`;
+
+  const userPrompt = `Generate exactly ${numFlashcards} high-quality flashcards from the following educational content.
+
+Return ONLY a valid JSON array with this exact structure (no markdown, no additional text):
 [
   {
-    "front": "Question or term",
-    "back": "Answer or definition"
+    "front": "Key concept, term, or question",
+    "back": "Complete definition, explanation, or answer"
   }
 ]
 
-Content:
+Content to extract flashcards from:
 ${content}`;
 
-  const response = await openai.chat.completions.create({
-    model: GPT_MODEL,
-    messages: [
-      {
-        role: 'system',
-        content: 'You are an educational assistant that creates effective flashcards.',
-      },
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+  
+  const result = await model.generateContent({
+    contents: [
       {
         role: 'user',
-        content: prompt,
-      },
+        parts: [
+          { text: `${systemPrompt}\n\n${userPrompt}` }
+        ]
+      }
     ],
-    temperature: 0.7,
+    generationConfig: {
+      temperature: 0.4,
+    },
   });
 
-  const contentText = extractResponseText(response);
-  if (!contentText) {
-    throw new Error('Failed to generate flashcards');
+  const contentText = result.response.text();
+  if (!contentText || !contentText.trim()) {
+    throw new Error('Failed to generate flashcards: Gemini returned empty response');
   }
 
+  // Try multiple parsing strategies
+  let parsed: any;
+  let parseError: Error | null = null;
+
+  // Strategy 1: Direct JSON parse
   try {
-    const parsed = JSON.parse(contentText);
-    const flashcards = parsed.flashcards ?? parsed;
-    return normalizeFlashcards(flashcards, numFlashcards);
-  } catch (error) {
-    throw new Error(`Failed to parse flashcards response: ${error instanceof Error ? error.message : error}`);
+    parsed = JSON.parse(contentText.trim());
+  } catch (e) {
+    parseError = e instanceof Error ? e : new Error(String(e));
+    
+    // Strategy 2: Extract JSON from markdown code blocks
+    const jsonMatch = contentText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (jsonMatch && jsonMatch[1]) {
+      try {
+        parsed = JSON.parse(jsonMatch[1].trim());
+        parseError = null;
+      } catch (e2) {
+        // Continue to next strategy
+      }
+    }
+    
+    // Strategy 3: Extract JSON object from text
+    if (parseError) {
+      const firstBrace = contentText.indexOf('[');
+      const lastBrace = contentText.lastIndexOf(']');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        try {
+          const jsonCandidate = contentText.substring(firstBrace, lastBrace + 1);
+          parsed = JSON.parse(jsonCandidate);
+          parseError = null;
+        } catch (e3) {
+          // All strategies failed
+        }
+      }
+    }
   }
+
+  if (parseError || !parsed) {
+    throw new Error(
+      `Failed to parse flashcards response: ${parseError?.message || 'Invalid JSON format'}. ` +
+      `Response preview: ${contentText.substring(0, 200)}...`
+    );
+  }
+
+  // Extract flashcards array from response
+  let flashcards: any;
+  if (Array.isArray(parsed)) {
+    flashcards = parsed;
+  } else if (parsed.flashcards && Array.isArray(parsed.flashcards)) {
+    flashcards = parsed.flashcards;
+  } else if (parsed.data && Array.isArray(parsed.data)) {
+    flashcards = parsed.data;
+  } else {
+    throw new Error(
+      `Invalid flashcard response structure. Expected array or object with 'flashcards' property. ` +
+      `Got: ${typeof parsed}`
+    );
+  }
+
+  return normalizeFlashcards(flashcards, numFlashcards);
 }
 
 export async function generateStudyNotes(content: string): Promise<StudyNote> {
@@ -248,7 +319,7 @@ export async function generateStudyNotesWithMeta(
 
   const startedAt = new Date();
   const meta: GenerationMeta = {
-    model: GPT_MODEL,
+    model: GEMINI_MODEL,
     createdAt: startedAt.toISOString(),
     attempts: 0,
     sanitized: false,
@@ -264,29 +335,14 @@ export async function generateStudyNotesWithMeta(
     throw new Error('Transcript too short to generate meaningful notes');
   }
 
-  const basePayload = {
-    model: GPT_MODEL,
-    messages: [
-      {
-        role: 'system',
-        content: `You create accurate, student-friendly study notes strictly from the provided transcript.\n\n${STUDY_NOTES_JSON_SCHEMA_PROMPT}`,
-      },
-      {
-        role: 'user',
-        content: `Generate structured study notes strictly from the transcript below. Use only the transcript information. 
+  const systemPrompt = `You create accurate, student-friendly study notes strictly from the provided transcript.\n\n${STUDY_NOTES_JSON_SCHEMA_PROMPT}`;
+  const userPrompt = `Generate structured study notes strictly from the transcript below. Use only the transcript information. 
 Output must be valid JSON matching the schema.
 
 Transcript:
 """
 ${sanitized}
-"""`,
-      },
-    ],
-    temperature: 0,
-    top_p: 1,
-    presence_penalty: 0,
-    frequency_penalty: 0,
-  };
+"""`;
 
   let lastError: unknown = null;
 
@@ -294,19 +350,16 @@ ${sanitized}
     meta.attempts = attempt;
 
     try {
-      const response = await callOpenAIWithTimeout(
-        basePayload,
+      const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+      
+      const result = await callGeminiWithTimeout(
+        model,
+        systemPrompt,
+        userPrompt,
         STUDY_NOTES_TIMEOUT_MS,
       );
 
-      if ((response as any).usage) {
-        meta.usage = (response as any).usage;
-      }
-      if ((response as any).id) {
-        meta.requestId = (response as any).id;
-      }
-
-      const rawText = extractResponseText(response);
+      const rawText = result.response.text();
       const parsed = await parseModelJson(rawText);
       const note = normalizeStudyNoteFromModel(parsed);
 
@@ -332,25 +385,19 @@ ${sanitized}
         )
       ) {
         try {
-          const repairPayload = {
-            model: GPT_MODEL,
-            messages: [
-              {
-                role: 'user',
-                content: jsonRepairPrompt(
-                  (err as any).rawText ?? (err as Error).message,
-                ),
-              },
-            ],
-            temperature: 0,
-            top_p: 1,
-          };
-
-          const repairResponse = await callOpenAIWithTimeout(
-            repairPayload,
+          const repairPrompt = jsonRepairPrompt(
+            (err as any).rawText ?? (err as Error).message,
+          );
+          
+          const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+          const repairResult = await callGeminiWithTimeout(
+            model,
+            '',
+            repairPrompt,
             STUDY_NOTES_TIMEOUT_MS,
           );
-          const repairText = extractResponseText(repairResponse);
+          
+          const repairText = repairResult.response.text();
           const repairedParsed = await parseModelJson(repairText);
           const repairedNote = normalizeStudyNoteFromModel(repairedParsed);
 
@@ -513,24 +560,6 @@ function normalizeFlashcards(
   }
 
   return normalized;
-}
-
-function extractResponseText(response: any): string {
-  if (!response) {
-    throw new Error('Empty response from OpenAI');
-  }
-
-  // Chat Completions API format (primary)
-  if (response.choices?.[0]?.message?.content) {
-    return response.choices[0].message.content.trim();
-  }
-
-  // Legacy Completions API format (fallback)
-  if (response.choices?.[0]?.text) {
-    return response.choices[0].text.trim();
-  }
-
-  throw new Error('OpenAI response did not include any text output');
 }
 
 /**
@@ -715,24 +744,38 @@ function normalizeStudyNoteFromModel(modelPayload: any): StudyNote {
   };
 }
 
-function callOpenAIWithTimeout(
-  payload: any,
+function callGeminiWithTimeout(
+  model: any,
+  systemPrompt: string,
+  userPrompt: string,
   timeoutMs: number,
-): Promise<unknown> {
+): Promise<any> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error('OpenAI request timed out'));
+      reject(new Error('Gemini request timed out'));
     }, timeoutMs);
 
-    openai.chat.completions
-      .create(payload)
-      .then((res) => {
+    const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt;
+
+    model.generateContent({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: fullPrompt }]
+        }
+      ],
+      generationConfig: {
+        temperature: 0,
+      },
+    })
+      .then((res: any) => {
         clearTimeout(timer);
         resolve(res);
       })
-      .catch((err) => {
+      .catch((err: any) => {
         clearTimeout(timer);
         reject(err);
       });
   });
 }
+

@@ -230,6 +230,22 @@ class SummaryRepositoryImpl implements SummaryRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, Summary>> updateSummary(Summary summary) async {
+    try {
+      final model = SummaryModel.fromEntity(summary);
+      await _cacheSummary(model);
+      return Right(summary);
+    } catch (error) {
+      return Left(
+        LocalFailure(
+          message: 'Failed to update summary',
+          cause: error,
+        ),
+      );
+    }
+  }
+
   /// Process all pending queued summaries
   Future<void> processQueuedSummaries() async {
     try {

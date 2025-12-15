@@ -4,7 +4,7 @@ This guide covers setting up and deploying Firebase Functions for SmartTutor Lit
 
 ## Prerequisites
 
-- Node.js (>=18.0.0)
+- Node.js (>=20.0.0)
 - Firebase CLI installed globally: `npm install -g firebase-tools`
 - Firebase project created at [Firebase Console](https://console.firebase.google.com)
 - Firebase project ID: `smart-tutor-lite-a66b5` (or your project ID)

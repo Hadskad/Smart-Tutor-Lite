@@ -8,6 +8,15 @@ import '../bloc/study_mode_bloc.dart';
 import '../bloc/study_mode_event.dart';
 import '../bloc/study_mode_state.dart';
 
+// Color Palette matching Home Dashboard
+const Color _kBackgroundColor = Color(0xFF1E1E1E);
+const Color _kCardColor = Color(0xFF333333);
+const Color _kAccentBlue = Color(0xFF00BFFF);
+const Color _kAccentCoral = Color(0xFFFF7043);
+const Color _kWhite = Colors.white;
+const Color _kLightGray = Color(0xFFCCCCCC);
+const Color _kDarkGray = Color(0xFF888888);
+
 class FlashcardViewerPage extends StatelessWidget {
   const FlashcardViewerPage({
     super.key,
@@ -19,35 +28,59 @@ class FlashcardViewerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => getIt<StudyModeBloc>()..add(StartStudySessionEvent(flashcardIds: flashcards.map((f) => f.id).toList())),
+      create: (_) => getIt<StudyModeBloc>()
+        ..add(StartStudySessionEvent(
+            flashcardIds: flashcards.map((f) => f.id).toList())),
       child: Scaffold(
+        backgroundColor: _kBackgroundColor,
         appBar: AppBar(
-          title: const Text('Study Session'),
+          backgroundColor: _kBackgroundColor,
+          elevation: 0,
+          title: const Text(
+            'Study Session',
+            style: TextStyle(
+              color: _kWhite,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          iconTheme: const IconThemeData(color: _kWhite),
         ),
         body: BlocBuilder<StudyModeBloc, StudyModeState>(
           builder: (context, state) {
             if (state is StudyModeSessionActive) {
               return _StudySessionView(sessionState: state);
             } else if (state is StudyModeSessionCompleted) {
-              return _SessionCompletedView(session: state.session, flashcards: state.flashcards);
+              return _SessionCompletedView(
+                  session: state.session, flashcards: state.flashcards);
             } else if (state is StudyModeError) {
               return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(Icons.error_outline,
+                        size: 48, color: _kAccentCoral),
                     const SizedBox(height: 16),
-                    Text(state.message),
+                    Text(
+                      state.message,
+                      style: const TextStyle(color: _kWhite, fontSize: 16),
+                    ),
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _kAccentBlue,
+                        foregroundColor: _kWhite,
+                      ),
                       child: const Text('Go Back'),
                     ),
                   ],
                 ),
               );
             }
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(color: _kAccentBlue),
+            );
           },
         ),
       ),
@@ -86,7 +119,9 @@ class _StudySessionViewState extends State<_StudySessionView> {
       },
       builder: (context, state) {
         if (state is! StudyModeSessionActive) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: CircularProgressIndicator(color: _kAccentBlue),
+          );
         }
 
         final session = state.session;
@@ -105,11 +140,17 @@ class _StudySessionViewState extends State<_StudySessionView> {
                   LinearProgressIndicator(
                     value: progress,
                     minHeight: 8,
+                    backgroundColor: _kCardColor,
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(_kAccentBlue),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Card $cardNumber of $totalCards',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: const TextStyle(
+                      color: _kLightGray,
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ),
@@ -128,19 +169,31 @@ class _StudySessionViewState extends State<_StudySessionView> {
                     margin: const EdgeInsets.all(24),
                     width: double.infinity,
                     constraints: const BoxConstraints(maxWidth: 600),
-                    child: Card(
-                      elevation: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(32),
-                        child: Center(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 300),
-                            child: Text(
-                              _isFlipped ? flashcard.back : flashcard.front,
-                              key: ValueKey(_isFlipped),
-                              style: Theme.of(context).textTheme.headlineSmall,
-                              textAlign: TextAlign.center,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _kCardColor,
+                        borderRadius: BorderRadius.circular(20.0),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(32),
+                      child: Center(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          child: Text(
+                            _isFlipped ? flashcard.back : flashcard.front,
+                            key: ValueKey(_isFlipped),
+                            style: const TextStyle(
+                              color: _kWhite,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w500,
                             ),
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       ),
@@ -157,24 +210,32 @@ class _StudySessionViewState extends State<_StudySessionView> {
                 children: [
                   ElevatedButton.icon(
                     onPressed: () {
-                      bloc.add(MarkFlashcardUnknownEvent(flashcardId: flashcard.id));
+                      bloc.add(
+                          MarkFlashcardUnknownEvent(flashcardId: flashcard.id));
                     },
                     icon: const Icon(Icons.close),
                     label: const Text('Didn\'t Know'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade100,
-                      foregroundColor: Colors.red.shade900,
+                      backgroundColor: _kAccentCoral,
+                      foregroundColor: _kWhite,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                   ElevatedButton.icon(
                     onPressed: () {
-                      bloc.add(MarkFlashcardKnownEvent(flashcardId: flashcard.id));
+                      bloc.add(
+                          MarkFlashcardKnownEvent(flashcardId: flashcard.id));
                     },
                     icon: const Icon(Icons.check),
                     label: const Text('Knew It'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade100,
-                      foregroundColor: Colors.green.shade900,
+                      backgroundColor: _kAccentBlue,
+                      foregroundColor: _kWhite,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ],
@@ -185,9 +246,10 @@ class _StudySessionViewState extends State<_StudySessionView> {
               padding: const EdgeInsets.only(bottom: 16),
               child: Text(
                 'Tap card to flip • Swipe to navigate',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey,
-                    ),
+                style: const TextStyle(
+                  color: _kDarkGray,
+                  fontSize: 12,
+                ),
               ),
             ),
           ],
@@ -221,45 +283,61 @@ class _SessionCompletedView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.celebration, size: 64, color: Colors.green),
+            const Icon(Icons.celebration, size: 64, color: _kAccentBlue),
             const SizedBox(height: 24),
-            Text(
+            const Text(
               'Session Complete!',
-              style: Theme.of(context).textTheme.headlineMedium,
+              style: TextStyle(
+                color: _kWhite,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 32),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    _StatRow(
-                      label: 'Cards Reviewed',
-                      value: '${session.cardsReviewed}/${session.flashcardIds.length}',
-                    ),
-                    const Divider(),
-                    _StatRow(
-                      label: 'Cards Known',
-                      value: '${session.cardsKnown}',
-                    ),
-                    const Divider(),
-                    _StatRow(
-                      label: 'Mastery',
-                      value: '${knownPercentage.toStringAsFixed(1)}%',
-                    ),
-                    const Divider(),
-                    _StatRow(
-                      label: 'Duration',
-                      value: '$durationMinutes minutes',
-                    ),
-                  ],
-                ),
+            Container(
+              decoration: BoxDecoration(
+                color: _kCardColor,
+                borderRadius: BorderRadius.circular(20.0),
+              ),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  _StatRow(
+                    label: 'Cards Reviewed',
+                    value:
+                        '${session.cardsReviewed}/${session.flashcardIds.length}',
+                  ),
+                  const Divider(color: _kDarkGray),
+                  _StatRow(
+                    label: 'Cards Known',
+                    value: '${session.cardsKnown}',
+                  ),
+                  const Divider(color: _kDarkGray),
+                  _StatRow(
+                    label: 'Mastery',
+                    value: '${knownPercentage.toStringAsFixed(1)}%',
+                  ),
+                  const Divider(color: _kDarkGray),
+                  _StatRow(
+                    label: 'Duration',
+                    value: '$durationMinutes minutes',
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kAccentBlue,
+                foregroundColor: _kWhite,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Done', style: TextStyle(fontSize: 16)),
             ),
           ],
         ),
@@ -286,17 +364,21 @@ class _StatRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: Theme.of(context).textTheme.bodyLarge,
+            style: const TextStyle(
+              color: _kLightGray,
+              fontSize: 16,
+            ),
           ),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: const TextStyle(
+              color: _kWhite,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
     );
   }
 }
-

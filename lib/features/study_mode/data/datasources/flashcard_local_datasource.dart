@@ -46,13 +46,50 @@ class FlashcardLocalDataSourceImpl implements FlashcardLocalDataSource {
     return _sessionsBox!;
   }
 
+  /// Recursively converts Map<dynamic, dynamic> to Map<String, dynamic>
+  Map<String, dynamic> _convertMap(dynamic data) {
+    if (data == null) {
+      throw CacheFailure(message: 'Data is null');
+    }
+    
+    if (data is! Map) {
+      throw CacheFailure(message: 'Data is not a Map: ${data.runtimeType}');
+    }
+
+    final result = <String, dynamic>{};
+    for (final entry in data.entries) {
+      final key = entry.key.toString();
+      final value = entry.value;
+      
+      if (value == null) {
+        result[key] = null;
+      } else if (value is Map) {
+        // Recursively convert nested maps
+        result[key] = _convertMap(value);
+      } else if (value is List) {
+        // Convert lists, handling nested maps in lists
+        result[key] = value.map((item) {
+          if (item is Map) {
+            return _convertMap(item);
+          }
+          return item;
+        }).toList();
+      } else {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
   @override
   Future<List<FlashcardModel>> getAllFlashcards() async {
     try {
       final box = await _getFlashcardsBox();
+      if (box.isEmpty) {
+        return [];
+      }
       final flashcards = box.values
-          .map((data) =>
-              FlashcardModel.fromJson(Map<String, dynamic>.from(data)))
+          .map((data) => FlashcardModel.fromJson(_convertMap(data)))
           .toList();
       return flashcards;
     } catch (e) {
@@ -84,7 +121,7 @@ class FlashcardLocalDataSourceImpl implements FlashcardLocalDataSource {
       if (data == null) {
         throw CacheFailure(message: 'Flashcard not found: $id');
       }
-      return FlashcardModel.fromJson(Map<String, dynamic>.from(data));
+      return FlashcardModel.fromJson(_convertMap(data));
     } catch (e) {
       if (e is CacheFailure) rethrow;
       throw CacheFailure(message: 'Failed to get flashcard: ${e.toString()}');
@@ -143,7 +180,7 @@ class FlashcardLocalDataSourceImpl implements FlashcardLocalDataSource {
       final box = await _getSessionsBox();
       final data = box.get(id);
       if (data == null) return null;
-      return StudySessionModel.fromJson(Map<String, dynamic>.from(data));
+      return StudySessionModel.fromJson(_convertMap(data));
     } catch (e) {
       throw CacheFailure(
           message: 'Failed to get study session: ${e.toString()}');
@@ -154,9 +191,11 @@ class FlashcardLocalDataSourceImpl implements FlashcardLocalDataSource {
   Future<List<StudySessionModel>> getAllStudySessions() async {
     try {
       final box = await _getSessionsBox();
+      if (box.isEmpty) {
+        return [];
+      }
       final sessions = box.values
-          .map((data) =>
-              StudySessionModel.fromJson(Map<String, dynamic>.from(data)))
+          .map((data) => StudySessionModel.fromJson(_convertMap(data)))
           .toList();
       // Sort by start time, most recent first
       sessions.sort((a, b) {

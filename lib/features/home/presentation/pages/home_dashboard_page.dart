@@ -19,45 +19,80 @@ class HomeDashboardPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _kBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: _kBackgroundColor,
+        elevation: 0,
+        centerTitle: false,
+        title: _HeaderTitle(),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: _ProfileIconButton(
+              onTap: () {
+                Navigator.pushNamed(context, AppRoutes.profile);
+              },
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 5.0),
-          child: Column(
-            children: [
-              const _HeaderWidget(),
-              const SizedBox(height: 32.0),
-              const _SearchBarWidget(),
-              const SizedBox(height: 32.0),
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.5,
-                width: double.infinity,
-                child: _FeatureCardsGrid(
-                  onNoteTakerTap: () {
-                    Navigator.pushNamed(context, AppRoutes.transcription);
-                  },
-                  onSummaryTap: () {
-                    Navigator.pushNamed(context, AppRoutes.summarization);
-                  },
-                  onPracticeTap: () {
-                    Navigator.pushNamed(context, AppRoutes.quiz);
-                  },
-                  onAudioNotesTap: () {
-                    Navigator.pushNamed(context, AppRoutes.tts);
-                  },
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5.0),
+            child: Column(
+              children: [
+                const SizedBox(height: 16.0),
+                const _SearchBarWidget(),
+                const SizedBox(height: 32.0),
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.5,
+                  width: double.infinity,
+                  child: _FeatureCardsGrid(
+                    onNoteTakerTap: () {
+                      Navigator.pushNamed(context, AppRoutes.transcription);
+                    },
+                    onSummaryTap: () {
+                      Navigator.pushNamed(context, AppRoutes.summarization);
+                    },
+                    onPracticeTap: () {
+                      Navigator.pushNamed(context, AppRoutes.quiz);
+                    },
+                    onAudioNotesTap: () {
+                      Navigator.pushNamed(context, AppRoutes.tts);
+                    },
+                  ),
                 ),
-              ),
-              SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  Text('My Courses:',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: _kLightGray,
-                          fontSize: 22)),
-                ],
-              ),
-            ],
+                const SizedBox(height: 16.0),
+                SizedBox(
+                  width: double.infinity,
+                  height: 70,
+                  child: _FeatureCard(
+                    title: 'Study Mode',
+                    subtitle: 'Flashcards',
+                    icon: Icons.quiz_outlined,
+                    iconColor: _kAccentBlue,
+                    isLarge: false,
+                    isHorizontal: true,
+                    cardColor: _kCardColor,
+                    onTap: () {
+                      Navigator.pushNamed(context, AppRoutes.studyMode);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Text('My Courses:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _kLightGray,
+                            fontSize: 22)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ),
@@ -65,63 +100,32 @@ class HomeDashboardPage extends StatelessWidget {
   }
 }
 
-// --- 1. Header Widget ---
+// --- 1. Header Title Widget (for AppBar) ---
 
-class _HeaderWidget extends StatelessWidget {
-  const _HeaderWidget({super.key});
+class _HeaderTitle extends StatelessWidget {
+  const _HeaderTitle({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text(
-              'Hi, Learner!',
-              style: TextStyle(
-                color: _kWhite,
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Master your flow.',
-              style: TextStyle(
-                color: _kAccentBlue,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        Container(
-          padding: const EdgeInsets.all(4.0),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: _kAccentBlue,
-              width: 2.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: _kAccentBlue.withOpacity(0.5),
-                blurRadius: 10,
-                spreadRadius: 1,
-              ),
-            ],
+    return Column(
+    
+      mainAxisSize: MainAxisSize.min,
+      children:  [
+        Text(
+          'Hi, Learner!',
+          style: TextStyle(
+            color: _kWhite,
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
           ),
-          child: const CircleAvatar(
-            radius: 20,
-            backgroundColor: _kCardColor,
-            child: Icon(
-              Icons.person_outlined,
-              color: _kWhite,
-              size: 24,
-            ),
+        ),
+        SizedBox(height: 1),
+        Text(
+          'Master your flow.',
+          style: TextStyle(
+            color: _kAccentBlue,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -129,7 +133,49 @@ class _HeaderWidget extends StatelessWidget {
   }
 }
 
-// --- 2. Search Bar Widget ---
+// --- 2. Profile Icon Button (for AppBar) ---
+
+class _ProfileIconButton extends StatelessWidget {
+  const _ProfileIconButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(30),
+      child: Container(
+        padding: const EdgeInsets.all(4.0),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: _kAccentBlue,
+            width: 2.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: _kAccentBlue.withOpacity(0.5),
+              blurRadius: 10,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: const CircleAvatar(
+          radius: 20,
+          backgroundColor: _kCardColor,
+          child: Icon(
+            Icons.person_outlined,
+            color: _kWhite,
+            size: 24,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// --- 3. Search Bar Widget ---
 
 class _SearchBarWidget extends StatelessWidget {
   const _SearchBarWidget({super.key});
@@ -243,7 +289,7 @@ class _FeatureCardsGrid extends StatelessWidget {
   }
 }
 
-// --- Feature Card Template ---
+// --- 5. Feature Card Template ---
 
 class _FeatureCard extends StatelessWidget {
   const _FeatureCard({
@@ -253,6 +299,7 @@ class _FeatureCard extends StatelessWidget {
     required this.icon,
     required this.iconColor,
     this.isLarge = false,
+    this.isHorizontal = false,
     required this.cardColor,
     required this.onTap,
   });
@@ -262,6 +309,7 @@ class _FeatureCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final bool isLarge;
+  final bool isHorizontal;
   final Color cardColor;
   final VoidCallback onTap;
 
@@ -271,49 +319,87 @@ class _FeatureCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(20.0),
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.all(isLarge ? 0 : 6),
+        padding: EdgeInsets.all(isLarge
+            ? 0
+            : isHorizontal
+                ? 2
+                : 6),
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(20.0),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: isLarge ? 70 : 36,
-              color: iconColor,
-            ),
-            isLarge ? SizedBox(height: 40) : SizedBox(height: 5),
-            Column(
+        child: isHorizontal
+            ? Row(
               crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Padding(
-                  padding: isLarge
-                      ? EdgeInsets.all(0)
-                      : EdgeInsets.symmetric(horizontal: 3),
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      color: _kWhite,
-                      fontSize: isLarge ? 24 : 15,
-                      fontWeight: FontWeight.bold,
-                    ),
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 48,
+                    color: iconColor,
                   ),
-                ),
-                isLarge ? SizedBox(height: 4) : SizedBox(height: 1),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: _kLightGray,
-                    fontSize: isLarge ? 16 : 12,
+                  const SizedBox(width: 20),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: _kWhite,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: _kLightGray,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-          ],
-        ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: isLarge ? 70 : 38,
+                    color: iconColor,
+                  ),
+                  isLarge ? SizedBox(height: 40) : SizedBox(height: 5),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: isLarge
+                            ? EdgeInsets.all(0)
+                            : EdgeInsets.symmetric(horizontal: 3),
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            color: _kWhite,
+                            fontSize: isLarge ? 24 : 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      isLarge ? SizedBox(height: 4) : SizedBox(height: 1),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: _kLightGray,
+                          fontSize: isLarge ? 16 : 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
       ),
     );
   }

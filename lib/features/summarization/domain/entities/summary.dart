@@ -9,6 +9,7 @@ class Summary extends Equatable {
     this.sourceId,
     this.metadata = const <String, dynamic>{},
     required this.createdAt,
+    this.title,
   });
 
   final String id;
@@ -17,6 +18,7 @@ class Summary extends Equatable {
   final String summaryText;
   final Map<String, dynamic> metadata;
   final DateTime createdAt;
+  final String? title; // Custom title for the summary (e.g., PDF filename)
 
   @override
   List<Object?> get props => [
@@ -26,5 +28,6 @@ class Summary extends Equatable {
         summaryText,
         metadata,
         createdAt,
+        title,
       ];
 }

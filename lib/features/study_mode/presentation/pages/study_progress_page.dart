@@ -7,6 +7,15 @@ import '../bloc/study_mode_bloc.dart';
 import '../bloc/study_mode_event.dart';
 import '../bloc/study_mode_state.dart';
 
+// Color Palette matching Home Dashboard
+const Color _kBackgroundColor = Color(0xFF1E1E1E);
+const Color _kCardColor = Color(0xFF333333);
+const Color _kAccentBlue = Color(0xFF00BFFF);
+const Color _kAccentCoral = Color(0xFFFF7043);
+const Color _kWhite = Colors.white;
+const Color _kLightGray = Color(0xFFCCCCCC);
+const Color _kDarkGray = Color(0xFF888888);
+
 class StudyProgressPage extends StatefulWidget {
   const StudyProgressPage({super.key});
 
@@ -35,8 +44,19 @@ class _StudyProgressPageState extends State<StudyProgressPage> {
     return BlocProvider.value(
       value: _bloc,
       child: Scaffold(
+        backgroundColor: _kBackgroundColor,
         appBar: AppBar(
-          title: const Text('Study Progress'),
+          backgroundColor: _kBackgroundColor,
+          elevation: 0,
+          title: const Text(
+            'Study Progress',
+            style: TextStyle(
+              color: _kWhite,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          iconTheme: const IconThemeData(color: _kWhite),
         ),
         body: BlocBuilder<StudyModeBloc, StudyModeState>(
           builder: (context, state) {
@@ -49,15 +69,21 @@ class _StudyProgressPageState extends State<StudyProgressPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(Icons.error_outline,
+                        size: 48, color: _kAccentCoral),
                     const SizedBox(height: 16),
-                    Text(state.message),
+                    Text(
+                      state.message,
+                      style: const TextStyle(color: _kWhite, fontSize: 16),
+                    ),
                   ],
                 ),
               );
             }
 
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(color: _kAccentBlue),
+            );
           },
         ),
       ),
@@ -76,132 +102,106 @@ class _ProgressView extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         // Overview card
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Overview',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.style,
-                        label: 'Total Cards',
-                        value: '${progress.totalFlashcards}',
-                        color: Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.check_circle,
-                        label: 'Known',
-                        value: '${progress.totalKnown}',
-                        color: Colors.green,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.help_outline,
-                        label: 'Unknown',
-                        value: '${progress.totalUnknown}',
-                        color: Colors.orange,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.repeat,
-                        label: 'Reviewed',
-                        value: '${progress.totalReviewed}',
-                        color: Colors.purple,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+        Container(
+          decoration: BoxDecoration(
+            color: _kCardColor,
+            borderRadius: BorderRadius.circular(20.0),
           ),
-        ),
-        const SizedBox(height: 16),
-        // Retention rate
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Mastery',
-                  style: Theme.of(context).textTheme.titleLarge,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Overview',
+                style: TextStyle(
+                  color: _kWhite,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(height: 24),
-                LinearProgressIndicator(
-                  value: progress.retentionRate / 100,
-                  minHeight: 24,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                const SizedBox(height: 16),
-                Center(
-                  child: Text(
-                    '${progress.retentionRate.toStringAsFixed(1)}%',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _getMasteryColor(progress.retentionRate),
-                        ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.style,
+                      label: 'Total Cards',
+                      value: '${progress.totalFlashcards}',
+                      color: _kAccentBlue,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.check_circle,
+                      label: 'Known',
+                      value: '${progress.totalKnown}',
+                      color: _kAccentBlue,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.help_outline,
+                      label: 'Unknown',
+                      value: '${progress.totalUnknown}',
+                      color: _kAccentCoral,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.repeat,
+                      label: 'Reviewed',
+                      value: '${progress.totalReviewed}',
+                      color: _kAccentBlue,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
         // Study sessions
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Study Sessions',
-                  style: Theme.of(context).textTheme.titleLarge,
+        Container(
+          decoration: BoxDecoration(
+            color: _kCardColor,
+            borderRadius: BorderRadius.circular(20.0),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Study Sessions',
+                style: TextStyle(
+                  color: _kWhite,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(height: 24),
-                _StatRow(
-                  icon: Icons.book,
-                  label: 'Total Sessions',
-                  value: '${progress.totalSessions}',
-                ),
-                const Divider(),
-                _StatRow(
-                  icon: Icons.timer,
-                  label: 'Avg. Duration',
-                  value: _formatDuration(progress.averageSessionDuration),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 24),
+              _StatRow(
+                icon: Icons.book,
+                label: 'Total Sessions',
+                value: '${progress.totalSessions}',
+              ),
+              const Divider(color: _kDarkGray),
+              _StatRow(
+                icon: Icons.timer,
+                label: 'Avg. Duration',
+                value: _formatDuration(progress.averageSessionDuration),
+              ),
+            ],
           ),
         ),
       ],
     );
-  }
-
-  Color _getMasteryColor(double percentage) {
-    if (percentage >= 80) return Colors.green;
-    if (percentage >= 60) return Colors.orange;
-    return Colors.red;
   }
 
   String _formatDuration(int seconds) {
@@ -237,7 +237,7 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -246,15 +246,19 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             label,
-            style: Theme.of(context).textTheme.bodySmall,
+            style: const TextStyle(
+              color: _kLightGray,
+              fontSize: 12,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -280,23 +284,27 @@ class _StatRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          Icon(icon, color: Colors.grey),
+          Icon(icon, color: _kDarkGray),
           const SizedBox(width: 16),
           Expanded(
             child: Text(
               label,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: const TextStyle(
+                color: _kLightGray,
+                fontSize: 16,
+              ),
             ),
           ),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: const TextStyle(
+              color: _kWhite,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
     );
   }
 }
-

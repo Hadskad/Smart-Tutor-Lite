@@ -23,11 +23,8 @@ class AudioRecorderWidget extends StatelessWidget {
       builder: (context, state) {
         final isRecording = state is TranscriptionRecording;
         final startedAt = isRecording ? state.startedAt : null;
-        final approxSizeBytes =
-            isRecording ? state.estimatedSizeBytes : null;
-        final isInputTooLow =
-            isRecording ? state.isInputTooLow : false;
-        final isCloudBusy = state is CloudTranscriptionState;
+        final approxSizeBytes = isRecording ? state.estimatedSizeBytes : null;
+        final isInputTooLow = isRecording ? state.isInputTooLow : false;
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -60,7 +57,7 @@ class AudioRecorderWidget extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                onPressed: isCloudBusy && !isRecording
+                onPressed: (state is TranscriptionProcessing && isRecording)
                     ? null
                     : () {
                         final bloc = context.read<TranscriptionBloc>();
@@ -70,10 +67,23 @@ class AudioRecorderWidget extends StatelessWidget {
                               : const StartRecording(),
                         );
                       },
-                icon:
-                    Icon(isRecording ? Icons.stop_rounded : Icons.mic_rounded),
+                icon: (state is TranscriptionProcessing && isRecording)
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(_kWhite),
+                        ),
+                      )
+                    : Icon(
+                        isRecording ? Icons.stop_rounded : Icons.mic_rounded),
                 label: Text(
-                  isRecording ? 'Stop Note Taking' : 'Start Note Taking',
+                  (state is TranscriptionProcessing && isRecording)
+                      ? 'Stopping...'
+                      : (isRecording
+                          ? 'Stop Note Taking'
+                          : 'Start Note Taking'),
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
