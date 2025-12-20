@@ -10,7 +10,7 @@ abstract class TtsEvent extends Equatable {
 class ConvertPdfToAudioEvent extends TtsEvent {
   const ConvertPdfToAudioEvent({
     required this.pdfUrl,
-    this.voice = '21m00Tcm4TlvDq8ikWAM', // Rachel
+    this.voice = 'en-US-Neural2-D', // Neural2-D (default)
   });
 
   final String pdfUrl;
@@ -23,7 +23,7 @@ class ConvertPdfToAudioEvent extends TtsEvent {
 class ConvertTextToAudioEvent extends TtsEvent {
   const ConvertTextToAudioEvent({
     required this.text,
-    this.voice = '21m00Tcm4TlvDq8ikWAM', // Rachel
+    this.voice = 'en-US-Neural2-D', // Neural2-D (default)
   });
 
   final String text;

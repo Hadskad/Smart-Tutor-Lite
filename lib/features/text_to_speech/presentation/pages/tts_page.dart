@@ -39,15 +39,21 @@ class _TtsPageState extends State<TtsPage> {
   late final TtsBloc _bloc;
   String? _uploadedPdfUrl;
   bool _isUploadingPdf = false;
-  String _selectedVoice = '21m00Tcm4TlvDq8ikWAM'; // Rachel (default)
+  String _selectedVoice = 'en-US-Neural2-D'; // Neural2-D (default)
   TtsSource _selectedSource = TtsSource.pdf;
   Transcription? _selectedTranscription;
 
   final List<Map<String, String>> _voices = [
-    {'value': '21m00Tcm4TlvDq8ikWAM', 'label': 'Rachel (Female)'},
-    {'value': 'pNInz6obpgDQGcFmaJgB', 'label': 'Adam (Male)'},
-    {'value': 'EXAVITQu4vr4xnSDxMaL', 'label': 'Bella (Female)'},
-    {'value': 'ErXwobaYiN019PkySvjV', 'label': 'Antoni (Male)'},
+    {'value': 'en-US-Neural2-A', 'label': 'Neural2-A (Female)'},
+    {'value': 'en-US-Neural2-B', 'label': 'Neural2-B (Male)'},
+    {'value': 'en-US-Neural2-C', 'label': 'Neural2-C (Female)'},
+    {'value': 'en-US-Neural2-D', 'label': 'Neural2-D (Male) - Default'},
+    {'value': 'en-US-Neural2-E', 'label': 'Neural2-E (Female)'},
+    {'value': 'en-US-Neural2-F', 'label': 'Neural2-F (Female)'},
+    {'value': 'en-US-Neural2-G', 'label': 'Neural2-G (Female)'},
+    {'value': 'en-US-Neural2-H', 'label': 'Neural2-H (Female)'},
+    {'value': 'en-US-Neural2-I', 'label': 'Neural2-I (Male)'},
+    {'value': 'en-US-Neural2-J', 'label': 'Neural2-J (Male)'},
   ];
 
   @override
@@ -141,7 +147,7 @@ class _TtsPageState extends State<TtsPage> {
       return;
     }
 
-    if (note.text.trim().isEmpty) {
+    if (note.text == null || note.text!.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Selected note has no text to convert'),
@@ -154,7 +160,7 @@ class _TtsPageState extends State<TtsPage> {
 
     _bloc.add(
       ConvertTextToAudioEvent(
-        text: note.text,
+        text: note.text!,
         voice: _selectedVoice,
       ),
     );
@@ -167,14 +173,12 @@ class _TtsPageState extends State<TtsPage> {
       child: Scaffold(
         backgroundColor: _kBackgroundColor,
         appBar: AppBar(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
           title: const Text(
             'Audio Notes',
             style: TextStyle(
-              color: _kWhite,
-              fontWeight: FontWeight.bold,
-              fontSize: 25
-            ),
+                color: _kWhite, fontWeight: FontWeight.bold, fontSize: 25),
           ),
           backgroundColor: _kCardColor,
           elevation: 0,
@@ -285,9 +289,9 @@ class _TtsPageState extends State<TtsPage> {
                         if (value == null) return;
                         setState(() {
                           _selectedSource = value;
-                        if (_selectedSource == TtsSource.pdf) {
-                          _selectedTranscription = null;
-                        }
+                          if (_selectedSource == TtsSource.pdf) {
+                            _selectedTranscription = null;
+                          }
                         });
                       },
                       icon: const Icon(
@@ -399,8 +403,7 @@ class _TtsPageState extends State<TtsPage> {
                 children: [
                   OutlinedButton.icon(
                     onPressed: () async {
-                      final selected =
-                          await NotePickerSheet.show(context);
+                      final selected = await NotePickerSheet.show(context);
                       if (!mounted) return;
 
                       setState(() {
@@ -458,7 +461,7 @@ class _TtsPageState extends State<TtsPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            _selectedTranscription!.text,
+                            _selectedTranscription!.text ?? 'No text available',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

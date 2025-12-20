@@ -144,3 +144,99 @@ class FormatTranscriptionNote extends TranscriptionEvent {
   @override
   List<Object?> get props => [id];
 }
+
+class RetryFormatNote extends TranscriptionEvent {
+  const RetryFormatNote(this.id);
+
+  final String id;
+
+  @override
+  List<Object?> get props => [id];
+}
+
+class RetryFailedTranscription extends TranscriptionEvent {
+  const RetryFailedTranscription(this.transcription);
+
+  final Transcription transcription;
+
+  @override
+  List<Object?> get props => [transcription];
+}
+
+class QueueJobAdded extends TranscriptionEvent {
+  const QueueJobAdded({
+    required this.audioPath,
+    required this.duration,
+    required this.fileSizeBytes,
+    required this.isOnlineMode,
+  });
+
+  final String audioPath;
+  final Duration duration;
+  final int fileSizeBytes;
+  final bool isOnlineMode;
+
+  @override
+  List<Object?> get props => [audioPath, duration, fileSizeBytes, isOnlineMode];
+}
+
+class QueueJobProcessingStarted extends TranscriptionEvent {
+  const QueueJobProcessingStarted(this.jobId);
+
+  final String jobId;
+
+  @override
+  List<Object?> get props => [jobId];
+}
+
+class QueueJobSucceeded extends TranscriptionEvent {
+  const QueueJobSucceeded({
+    required this.jobId,
+    required this.noteId,
+  });
+
+  final String jobId;
+  final String noteId;
+
+  @override
+  List<Object?> get props => [jobId, noteId];
+}
+
+class QueueJobFailed extends TranscriptionEvent {
+  const QueueJobFailed({
+    required this.jobId,
+    required this.errorMessage,
+  });
+
+  final String jobId;
+  final String errorMessage;
+
+  @override
+  List<Object?> get props => [jobId, errorMessage];
+}
+
+class QueueJobCancelled extends TranscriptionEvent {
+  const QueueJobCancelled(this.jobId);
+
+  final String jobId;
+
+  @override
+  List<Object?> get props => [jobId];
+}
+
+class QueueJobRetried extends TranscriptionEvent {
+  const QueueJobRetried(this.jobId);
+
+  final String jobId;
+
+  @override
+  List<Object?> get props => [jobId];
+}
+
+class LoadQueue extends TranscriptionEvent {
+  const LoadQueue();
+}
+
+class ResumeProcessingAfterPause extends TranscriptionEvent {
+  const ResumeProcessingAfterPause();
+}

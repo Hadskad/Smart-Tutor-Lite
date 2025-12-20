@@ -181,7 +181,7 @@ Convert PDF or text to audio.
 {
   "sourceType": "pdf",
   "sourceId": "gs://bucket/path/to/document.pdf",
-  "voice": "21m00Tcm4TlvDq8ikWAM"
+  "voice": "en-US-Neural2-D"
 }
 ```
 
@@ -191,14 +191,14 @@ OR
 {
   "sourceType": "text",
   "sourceId": "Text content to convert to speech",
-  "voice": "21m00Tcm4TlvDq8ikWAM"
+  "voice": "en-US-Neural2-D"
 }
 ```
 
 **Note**: 
 - When `sourceType` is `"text"`, `sourceId` should contain the actual text content.
 - When `sourceType` is `"pdf"`, `sourceId` should be a Firebase Storage URL (gs://) or HTTP URL to the PDF file.
-- `voice` is optional and defaults to `"21m00Tcm4TlvDq8ikWAM"` (Rachel). See [ELEVENLABS_TTS_SETUP.md](ELEVENLABS_TTS_SETUP.md) for available voices.
+- `voice` is optional and defaults to `"en-US-Neural2-D"` (Neural2-D). See [GOOGLE_TTS_SETUP.md](GOOGLE_TTS_SETUP.md) for available voices.
 
 **Response:**
 ```json
@@ -209,7 +209,7 @@ OR
   "audioUrl": "",
   "storagePath": "",
   "status": "processing",
-  "voice": "21m00Tcm4TlvDq8ikWAM",
+  "voice": "en-US-Neural2-D",
   "createdAt": "2024-01-01T00:00:00Z"
 }
 ```
@@ -228,7 +228,7 @@ Get TTS job status by ID.
   "audioUrl": "",
   "storagePath": "",
   "status": "processing",
-  "voice": "21m00Tcm4TlvDq8ikWAM",
+  "voice": "en-US-Neural2-D",
   "createdAt": "2024-01-01T00:00:00Z"
 }
 ```
@@ -242,7 +242,7 @@ Get TTS job status by ID.
   "audioUrl": "https://storage.googleapis.com/bucket/tts/uuid-string/audio.mp3",
   "storagePath": "tts/uuid-string/audio.mp3",
   "status": "completed",
-  "voice": "21m00Tcm4TlvDq8ikWAM",
+  "voice": "en-US-Neural2-D",
   "createdAt": "2024-01-01T00:00:00Z",
   "updatedAt": "2024-01-01T00:00:05Z"
 }
@@ -257,7 +257,7 @@ Get TTS job status by ID.
   "audioUrl": "",
   "storagePath": "",
   "status": "failed",
-  "voice": "21m00Tcm4TlvDq8ikWAM",
+  "voice": "en-US-Neural2-D",
   "errorMessage": "Error details here",
   "createdAt": "2024-01-01T00:00:00Z",
   "updatedAt": "2024-01-01T00:00:05Z"

@@ -1,6 +1,6 @@
 # SmartTutor Lite
 
-An offline-first, AI-powered study assistant for mobile devices. Transcribe lectures, summarize notes & PDFs, generate quizzes, convert PDFs to audio, and support study mode - all optimized for ARM architecture.
+An offline-first, AI-powered study assistant for mobile devices. Record and convert recorded lectures to well structured notes, summarize notes & PDFs, generate quizzes, convert PDFs to audio, and support study mode - all optimized for ARM architecture.
 
 ## Features
 
@@ -27,7 +27,7 @@ An offline-first, AI-powered study assistant for mobile devices. Transcribe lect
 - **AI Services**: 
   - Soniox for Transcription
   - OpenAI GPT for summarization, quiz generation, flashcards
-  - ElevenLabs Text-to-Speech for high-quality, natural-sounding audio conversion
+  - Google Cloud Neural2 Text-to-Speech for high-quality, natural-sounding audio conversion
 
 ### Native Components
 - **Android**: C++/JNI bridge for Whisper transcription
@@ -42,8 +42,7 @@ Before you begin, ensure you have the following installed:
 
 - **Flutter SDK** (>=3.2.0) - [Install Flutter](https://flutter.dev/docs/get-started/install)
 - **Dart SDK** (>=3.2.0) - Included with Flutter
-- **Node.js** (>=20.0.0) - Required for Firebase Functions - [Download Node.js](https://nodejs.org/)
-- **Firebase CLI** - Install via `npm install -g firebase-tools`
+- **Node.js** (>=20.0.0) - [Download Node.js](https://nodejs.org/) (optional, firebase functions already deployed)
 - **Android Studio** (for Android development)
   - Android SDK
   - Android NDK (required for native Whisper integration)
@@ -60,12 +59,6 @@ After installing the prerequisites, verify your setup:
 # Check Flutter installation and environment
 flutter doctor -v
 
-# Verify Node.js version
-node --version  # Should be >=20.0.0
-
-# Verify Firebase CLI
-firebase --version
-
 # Verify CocoaPods (macOS/iOS only)
 pod --version
 ```
@@ -77,7 +70,7 @@ pod --version
 
 ### Quick Start Guide
 
-For a comprehensive build guide with detailed ARM device instructions, see [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md).
+
 
 ### Flutter App Setup
 
@@ -89,48 +82,41 @@ For a comprehensive build guide with detailed ARM device instructions, see [BUIL
 
 2. **Download Missing Files**
    
-   ⚠️ **Important**: Several required files are excluded from the repository (see `.gitignore`). You must download them separately before building.
+   ⚠️ **Important**: Whisper model files are excluded from the repository and must be downloaded separately.
    
-   **See [SETUP.md](SETUP.md) for complete instructions on obtaining:**
-   - Whisper model files (required for transcription)
-   - Firebase configuration files
-   - Generated code files
-   - Environment variables
+    Download Whisper model files to assets/models/:
+     Run: bash scripts/setup_whisper.sh (downloads models and whisper.cpp sources)
+      Or manually download ggml-base.en.bin and/or ggml-tiny.en.bin from Hugging Face
+
+   **See [SETUP.md](SETUP.md) for complete instructions on obtaining Whisper model files.**
    
-   Quick reference:
-   ```bash
-   # Download Whisper models and native sources
-   bash scripts/setup_whisper.sh
    
-   # Generate Firebase configuration files
-   dart pub global activate flutterfire_cli
-   flutterfire configure
-   ```
+   ✅ **Firebase Configuration**: Already included in the repository. No setup needed!
 
 3. **Install Flutter dependencies**
    ```bash
    flutter pub get
    ```
 
-4. **Generate code**
+4. **Generate code files**
    ```bash
+   run the below command
    flutter pub run build_runner build --delete-conflicting-outputs
    ```
 
-5. **Configure Firebase**
+5. **Firebase Configuration** ✅ Pre-configured
    
-   If you haven't already, set up Firebase:
-   - Install FlutterFire CLI: `dart pub global activate flutterfire_cli`
-   - Configure Firebase: `flutterfire configure`
-   - This generates `firebase_options.dart` and downloads config files
-   - Ensure `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) are in place
+   Firebase is already configured for this project. All config files are included in the repository:
+   - `lib/firebase_options.dart` ✅
+   - `android/app/google-services.json` ✅
+   - `ios/GoogleService-Info.plist` ✅
    
-   For detailed Firebase setup, see [SETUP.md](SETUP.md) and [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md)
+   Firebase Functions are pre-deployed and configured. No setup needed!
 
 6. **Setup iOS Dependencies (iOS/macOS only)**
    
    Install CocoaPods dependencies:
-   ```bash
+   ```bash               Run the below commands one after the other
    cd ios
    pod install
    cd ..
@@ -142,7 +128,7 @@ For a comprehensive build guide with detailed ARM device instructions, see [BUIL
    sudo gem install cocoapods
    ```
 
-7. **Setup Android Native Build Tools**
+7. **Setup Android Native Build Tools(for android)**
    
    Ensure Android NDK and CMake are installed:
    - Open Android Studio
@@ -163,8 +149,11 @@ For a comprehensive build guide with detailed ARM device instructions, see [BUIL
 
 8. **Run the app**
    ```bash
+   in the project root folder (smart_tutor_lite), run the below command.
    flutter run
    ```
+
+   For a comprehensive build guide with detailed ARM device instructions, see [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md).
 
 ### Building for Production
 
@@ -220,23 +209,11 @@ flutter build apk --release --target-platform android-arm64
 
 For detailed build instructions including ARM-specific optimizations, troubleshooting, and deployment guides, see [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md).
 
-### Firebase Functions Setup
+### Firebase Functions
 
-See [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md) for detailed Firebase Functions setup and deployment instructions.
+Firebase Functions are pre-deployed and configured. The backend API keys are already set up, so judges/evaluators can use the app immediately without any Firebase setup.
 
-Quick setup:
-```bash
-cd functions
-npm install
-firebase deploy --only functions
-```
-
-**Important**: Don't forget to set API keys:
-```bash
-firebase functions:config:set openai.api_key="YOUR_OPENAI_API_KEY"
-firebase functions:config:set elevenlabs.api_key="YOUR_ELEVENLABS_API_KEY"
-firebase functions:config:set soniox.api_key="YOUR_SONIOX_API_KEY"
-```
+For developers who want to deploy their own Firebase Functions, see [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
 
 ## Project Structure
 
@@ -287,7 +264,7 @@ SmartTutor Lite is designed to work offline:
 
 ## ARM Architecture Optimization
 
-SmartTutor Lite is optimized for ARM-based mobile devices as part of the **ARM AI Challenge**:
+SmartTutor Lite is optimized for ARM-based mobile devices.
 
 - Native C++/JNI (Android) and Objective-C++ (iOS) for Whisper integration
 - Quantized Whisper models for efficient inference
@@ -295,7 +272,6 @@ SmartTutor Lite is optimized for ARM-based mobile devices as part of the **ARM A
 - Performance monitoring for CPU, memory, and battery usage
 - On-device AI processing with minimal battery impact
 
-See [HACKATHON_COMPLIANCE.md](HACKATHON_COMPLIANCE.md) for detailed compliance information and [docs/ARM_AI_OPTIMIZATION.md](docs/ARM_AI_OPTIMIZATION.md) for technical details.
 
 ## Testing
 
@@ -313,7 +289,6 @@ flutter test integration_test/
 
 - **[BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md)** - Comprehensive step-by-step build guide for ARM devices
 - **[SETUP.md](SETUP.md)** - Guide to obtain missing files not in repository
-- [Hackathon Compliance](HACKATHON_COMPLIANCE.md) - ARM AI Challenge compliance details
 - [Firebase Setup](docs/FIREBASE_SETUP.md) - Firebase Functions deployment guide
 
 
@@ -330,9 +305,9 @@ flutter test integration_test/
 
 - [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) for on-device transcription
 - OpenAI for cloud AI services (summarization, quiz generation, flashcards)
-- ElevenLabs for high-quality text-to-speech
+- Google Cloud for high-quality Neural2 text-to-speech
 - Firebase for backend infrastructure
-- Built for the ARM AI Challenge
+
 
 ## License
 

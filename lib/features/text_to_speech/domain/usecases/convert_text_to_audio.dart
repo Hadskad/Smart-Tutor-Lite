@@ -13,9 +13,8 @@ class ConvertTextToAudio {
 
   Future<Either<Failure, TtsJob>> call({
     required String text,
-    String voice = 'en-US-Standard-B',
+    String voice = 'en-US-Neural2-D',
   }) async {
     return _repository.convertTextToAudio(text: text, voice: voice);
   }
 }
-

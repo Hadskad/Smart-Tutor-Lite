@@ -38,6 +38,14 @@ import 'package:smart_tutor_lite/features/quiz/domain/usecases/submit_quiz.dart'
     as _i464;
 import 'package:smart_tutor_lite/features/quiz/presentation/bloc/quiz_bloc.dart'
     as _i256;
+import 'package:smart_tutor_lite/features/study_folders/data/datasources/study_folder_local_datasource.dart'
+    as _i368;
+import 'package:smart_tutor_lite/features/study_folders/data/repositories/study_folder_repository_impl.dart'
+    as _i15;
+import 'package:smart_tutor_lite/features/study_folders/domain/repositories/study_folder_repository.dart'
+    as _i459;
+import 'package:smart_tutor_lite/features/study_folders/presentation/bloc/study_folders_bloc.dart'
+    as _i783;
 import 'package:smart_tutor_lite/features/study_mode/data/datasources/flashcard_local_datasource.dart'
     as _i777;
 import 'package:smart_tutor_lite/features/study_mode/data/datasources/flashcard_remote_datasource.dart'
@@ -88,6 +96,8 @@ import 'package:smart_tutor_lite/features/transcription/data/datasources/transcr
     as _i1047;
 import 'package:smart_tutor_lite/features/transcription/data/datasources/transcription_preferences_local_data_source.dart'
     as _i287;
+import 'package:smart_tutor_lite/features/transcription/data/datasources/transcription_queue_local_data_source.dart'
+    as _i892;
 import 'package:smart_tutor_lite/features/transcription/data/datasources/transcription_remote_datasource.dart'
     as _i803;
 import 'package:smart_tutor_lite/features/transcription/data/datasources/whisper_local_datasource.dart'
@@ -153,6 +163,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i457.FirebaseStorage>(
         () => externalModule.firebaseStorage());
     gh.lazySingleton<_i99.PerformanceBridge>(() => _i99.PerformanceBridge());
+    gh.lazySingleton<_i892.TranscriptionQueueLocalDataSource>(() =>
+        _i892.TranscriptionQueueLocalDataSourceImpl(
+            gh<_i460.SharedPreferences>()));
     gh.lazySingleton<_i496.AppLogger>(
         () => _i496.AppLogger(gh<_i974.Logger>()));
     gh.lazySingleton<_i287.TranscriptionPreferencesLocalDataSource>(() =>
@@ -178,18 +191,24 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i588.TranscriptionPreferencesRepository>(() =>
         _i671.TranscriptionPreferencesRepositoryImpl(
             gh<_i287.TranscriptionPreferencesLocalDataSource>()));
+    gh.lazySingleton<_i368.StudyFolderLocalDataSource>(
+        () => _i368.StudyFolderLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i38.SummaryQueueLocalDataSource>(
         () => _i38.SummaryQueueLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i756.WhisperLifecycleObserver>(
         () => _i756.WhisperLifecycleObserver(gh<_i687.WhisperFfi>()));
     gh.lazySingleton<_i820.WhisperLocalDataSource>(
         () => _i820.WhisperLocalDataSourceImpl(gh<_i687.WhisperFfi>()));
+    gh.lazySingleton<_i459.StudyFolderRepository>(() =>
+        _i15.StudyFolderRepositoryImpl(gh<_i368.StudyFolderLocalDataSource>()));
     gh.lazySingleton<_i361.Dio>(
         () => externalModule.dio(gh<_i496.AppLogger>()));
     gh.lazySingleton<_i440.NetworkInfo>(() => _i440.NetworkInfoImpl(
           gh<_i895.Connectivity>(),
           gh<_i361.Dio>(),
         ));
+    gh.factory<_i783.StudyFoldersBloc>(
+        () => _i783.StudyFoldersBloc(gh<_i459.StudyFolderRepository>()));
     gh.lazySingleton<_i80.TranscriptionJobRepository>(
         () => _i438.TranscriptionJobRepositoryImpl(
               gh<_i1047.TranscriptionJobRemoteDataSource>(),
@@ -266,6 +285,7 @@ extension GetItInjectableX on _i174.GetIt {
           gh<_i30.RequestTranscriptionJobRetry>(),
           gh<_i14.RequestNoteRetry>(),
           gh<_i588.TranscriptionPreferencesRepository>(),
+          gh<_i892.TranscriptionQueueLocalDataSource>(),
         ));
     gh.lazySingleton<_i840.ConvertPdfToAudio>(
         () => _i840.ConvertPdfToAudio(gh<_i90.TtsRepository>()));

@@ -8,8 +8,8 @@ import {
   extractTextFromPdf,
   downloadFile,
 } from '../utils/storage-helpers';
-import { textToSpeechLong } from '../utils/tts-helpers';
-import { VoiceId, DEFAULT_VOICE_ID } from '../config/elevenlabs-tts';
+import { textToSpeechLong } from '../utils/google-tts-helpers';
+import { VoiceId, DEFAULT_VOICE_NAME } from '../config/google-tts';
 
 const app = express();
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25MB limit
@@ -20,7 +20,7 @@ app.use(express.json());
 // POST /tts - Convert PDF or text to audio
 app.post('/', async (req: Request, res: Response) => {
   try {
-    const { sourceType, sourceId, voice = DEFAULT_VOICE_ID } = req.body;
+    const { sourceType, sourceId, voice = DEFAULT_VOICE_NAME } = req.body;
 
     if (!sourceType || !sourceId) {
       res.status(400).json({

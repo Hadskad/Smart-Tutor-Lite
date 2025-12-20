@@ -13,9 +13,8 @@ class ConvertPdfToAudio {
 
   Future<Either<Failure, TtsJob>> call({
     required String pdfUrl,
-    String voice = 'en-US-Standard-B',
+    String voice = 'en-US-Neural2-D',
   }) async {
     return _repository.convertPdfToAudio(pdfUrl: pdfUrl, voice: voice);
   }
 }
-

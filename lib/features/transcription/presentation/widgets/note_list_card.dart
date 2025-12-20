@@ -18,6 +18,7 @@ class NoteListCard extends StatelessWidget {
     this.onEditTitle,
     this.onDelete,
     this.onCreateFlashcards,
+    this.onRetry,
     this.showActions = true,
   });
 
@@ -26,14 +27,22 @@ class NoteListCard extends StatelessWidget {
   final VoidCallback? onEditTitle;
   final VoidCallback? onDelete;
   final VoidCallback? onCreateFlashcards;
+  final VoidCallback? onRetry;
   final bool showActions;
 
   @override
   Widget build(BuildContext context) {
-    final title = transcription.title ??
-        (transcription.text.length > 50
-            ? '${transcription.text.substring(0, 50)}...'
-            : transcription.text);
+    final isFailed = transcription.isFailed;
+    final rawText = transcription.text ?? '';
+    final baseTitle = transcription.title ?? rawText;
+
+    final title = isFailed
+        ? 'Failed note generation'
+        : (baseTitle.length > 50
+            ? '${baseTitle.substring(0, 50)}...'
+            : baseTitle);
+
+    final previewText = isFailed ? '' : rawText;
 
     return Container(
       decoration: BoxDecoration(
@@ -42,7 +51,7 @@ class NoteListCard extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
+        onTap: isFailed ? null : onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -64,7 +73,7 @@ class NoteListCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (onEditTitle != null)
+                        if (!isFailed && onEditTitle != null)
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 18),
                             color: _kDarkGray,
@@ -87,27 +96,39 @@ class NoteListCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              Text(
-                transcription.text,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: _kLightGray,
-                  fontSize: 16,
-                  height: 1.5,
-                ),
-              ),
-              if (showActions && (onDelete != null || onCreateFlashcards != null))
-                ...[
-                  const SizedBox(height: 16),
-                  Divider(
-                    height: 1,
-                    color: _kDarkGray.withOpacity(0.3),
+              if (previewText.isNotEmpty)
+                Text(
+                  previewText,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _kLightGray,
+                    fontSize: 16,
+                    height: 1.5,
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
+                ),
+              if (showActions) ...[
+                const SizedBox(height: 16),
+                Divider(
+                  height: 1,
+                  color: _kDarkGray.withOpacity(0.3),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (isFailed && onRetry != null)
+                      Flexible(
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Retry'),
+                          onPressed: onRetry,
+                          style: TextButton.styleFrom(
+                            foregroundColor: _kAccentCoral,
+                          ),
+                        ),
+                      )
+                    else ...[
                       if (onDelete != null)
                         Flexible(
                           child: TextButton.icon(
@@ -119,7 +140,7 @@ class NoteListCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      if (onCreateFlashcards != null)
+                      if (!isFailed && onCreateFlashcards != null)
                         Flexible(
                           child: TextButton.icon(
                             icon: const Icon(Icons.style_outlined, size: 15),
@@ -131,8 +152,9 @@ class NoteListCard extends StatelessWidget {
                           ),
                         ),
                     ],
-                  ),
-                ],
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -140,5 +162,3 @@ class NoteListCard extends StatelessWidget {
     );
   }
 }
-
-

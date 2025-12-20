@@ -39,6 +39,7 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
     Options? options,
     ResponseParser<T>? parser,
+    int maxRetries = 2,
   }) async {
     return _request(
       () => _dio.post(
@@ -48,6 +49,7 @@ class ApiClient {
         options: options,
       ),
       parser,
+      maxRetries: maxRetries,
     );
   }
 

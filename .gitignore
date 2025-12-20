@@ -51,7 +51,7 @@ functions/lib/
 # Node modules
 functions/node_modules/
 
-
+docs\API_DOCUMENTATION.md
 
 # Temporary files
 allfiles.txt
@@ -73,3 +73,7 @@ ios/Flutter/flutter_export_environment.sh
 *.dart.js
 *.dart.js.map
 *.info.json
+# Service account credentials
+service-account.json
+*-service-account.json
+*.json.key

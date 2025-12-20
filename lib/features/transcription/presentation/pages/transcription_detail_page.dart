@@ -45,7 +45,7 @@ class _TranscriptionDetailPageState extends State<TranscriptionDetailPage> {
   }
 
   void _copyToClipboard(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: widget.transcription.text));
+    Clipboard.setData(ClipboardData(text: widget.transcription.text ?? ''));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Transcription copied to clipboard'),
@@ -284,7 +284,7 @@ class _TranscriptionDetailPageState extends State<TranscriptionDetailPage> {
             const Divider(height: 1),
             const SizedBox(height: 16),
             SelectableText(
-              widget.transcription.text,
+              widget.transcription.text ?? 'No transcription text available',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     height: 1.6,
                   ),

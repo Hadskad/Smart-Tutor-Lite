@@ -35,7 +35,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   late final StudyModeBloc _studyModeBloc;
   late final TranscriptionBloc _transcriptionBloc;
   bool _isGenerating = false;
-  bool _isFormatting = false;
   Transcription? _currentTranscription;
 
   @override
@@ -62,7 +61,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   String _formatStructuredNoteForCopy() {
     final transcription = _currentTranscription ?? widget.transcription;
     if (transcription.structuredNote == null) {
-      return transcription.text;
+      return transcription.text ?? '';
     }
 
     final note = transcription.structuredNote!;
@@ -131,10 +130,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
 
   void _formatNote(BuildContext context) {
     final transcription = _currentTranscription ?? widget.transcription;
-    setState(() {
-      _isFormatting = true;
-    });
-
     _transcriptionBloc.add(FormatTranscriptionNote(transcription.id));
   }
 
@@ -142,9 +137,9 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   Widget build(BuildContext context) {
     final transcription = _currentTranscription ?? widget.transcription;
     final noteTitle = transcription.title ??
-        (transcription.text.length > 50
-            ? '${transcription.text.substring(0, 50)}...'
-            : transcription.text);
+        (transcription.text != null && transcription.text!.length > 50
+            ? '${transcription.text!.substring(0, 50)}...'
+            : transcription.text) ?? 'Untitled Note';
     final structuredNote = transcription.structuredNote;
 
     return MultiBlocProvider(
@@ -158,11 +153,10 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
             // Check if this is the formatted transcription
             if (state.transcription.id == _currentTranscription?.id &&
                 state.transcription.structuredNote != null) {
-              setState(() {
-                _isFormatting = false;
-                _currentTranscription = state.transcription;
-              });
               if (mounted) {
+                setState(() {
+                  _currentTranscription = state.transcription;
+                });
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: const Row(
@@ -181,9 +175,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
               }
             }
           } else if (state is TranscriptionError) {
-            setState(() {
-              _isFormatting = false;
-            });
+            // Only show error snackbar if mounted
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -199,11 +191,15 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                 ),
               );
             }
-          } else if (state is TranscriptionProcessing && _isFormatting) {
-            // Keep formatting state active
           }
         },
-        child: BlocListener<StudyModeBloc, StudyModeState>(
+        child: BlocBuilder<TranscriptionBloc, TranscriptionState>(
+          builder: (context, transcriptionState) {
+            // Read formatting state from bloc
+            final isFormatting = transcriptionState.formattingTranscriptionId ==
+                (_currentTranscription?.id ?? widget.transcription.id);
+            
+            return BlocListener<StudyModeBloc, StudyModeState>(
         listener: (context, state) {
           if (state is StudyModeFlashcardsLoaded) {
             setState(() {
@@ -295,20 +291,23 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                       ),
                     ],
                   ),
-                  child: _buildActionsSection(context),
+                  child: _buildActionsSection(context, isFormatting),
                 ),
               ],
             ),
           ),
         ),
+            );
+          },
+        ),
       ),
-    ));
+    );
   }
 
   Widget _buildFallbackContent() {
     final transcription = _currentTranscription ?? widget.transcription;
     return SelectableText(
-      transcription.text,
+      transcription.text ?? 'No transcription text available',
       style: const TextStyle(
         color: _kLightGray,
         fontSize: 16,
@@ -494,8 +493,9 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     return list != null && list.isNotEmpty;
   }
 
-  Widget _buildActionsSection(BuildContext context) {
-    final hasStructuredNote = widget.transcription.structuredNote != null;
+  Widget _buildActionsSection(BuildContext context, bool isFormatting) {
+    final transcription = _currentTranscription ?? widget.transcription;
+    final hasStructuredNote = transcription.structuredNote != null;
     
     // If no structured note, show Format button instead of Create Flashcards
     if (!hasStructuredNote) {
@@ -516,7 +516,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
           const SizedBox(width: 12),
           Expanded(
             child: FilledButton.icon(
-              icon: _isFormatting
+              icon: isFormatting
                   ? const SizedBox(
                       width: 18,
                       height: 18,
@@ -526,8 +526,8 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                       ),
                     )
                   : const Icon(Icons.auto_awesome, size: 18),
-              label: Text(_isFormatting ? 'Formatting...' : 'Format this note'),
-              onPressed: _isFormatting ? null : () => _formatNote(context),
+              label: Text(isFormatting ? 'Formatting...' : 'Format this note'),
+              onPressed: isFormatting ? null : () => _formatNote(context),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 backgroundColor: _kAccentBlue,

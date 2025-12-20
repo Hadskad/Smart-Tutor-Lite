@@ -1,4 +1,36 @@
-<!-- afea599a-6082-4dfc-9a56-2fa0bc8e2733 03c0fc20-8fc3-4c2d-ac5c-64788cbe7a82 -->
+---
+name: Robust Transcription Reliability Plan
+overview: ""
+todos:
+  - id: 798d5228-4517-4422-92b0-ec29c6598eb0
+    content: "Phase 5: Text-to-Speech (TTS) Feature"
+    status: pending
+  - id: 662b7e2a-a282-4d6b-883f-030706e22787
+    content: Integrate Google Cloud TTS with Neural2/WaveNet voices
+    status: pending
+  - id: 1ec80029-9aa6-4e8d-8023-b472be1dbe25
+    content: Add voice selection UI to Flutter TTS page
+    status: pending
+  - id: eae366f8-d4cf-4f30-800b-e0e257a1e2cd
+    content: Design the TranscriptionJob Firestore schema and end-to-end state machine for transcription jobs.
+    status: pending
+  - id: 305c6a86-8bc9-4d2d-a3f4-2567859b82c0
+    content: Implement the online Soniox transcription pipeline using Storage uploads, job workers, chunking/async processing, and structured error handling.
+    status: pending
+  - id: ff76e23b-9389-48cd-a8c2-571878c45cd2
+    content: Harden the offline Whisper path with model integrity checks, single-context reuse, robust error mapping, and background processing.
+    status: pending
+  - id: a297ef49-74bb-40ac-83c8-e8d981f92619
+    content: Implement mode selection, fallback logic, and long-job UX in the Flutter BLoC and UI, including clear states and retry actions.
+    status: pending
+  - id: c63bfeca-41c0-498d-93f0-45bc4396f631
+    content: Add structured logging, basic metrics, retention policies, and cost guards for Storage, Functions, and Firestore.
+    status: pending
+  - id: 65f5a99e-fae3-47a7-8978-9ffe61374849
+    content: Create and execute a test plan (unit, integration, manual) covering short, medium, and long recordings, noisy environments, and network edge cases.
+    status: pending
+---
+
 # Robust Transcription Reliability Plan
 
 ## 1. Goals & Constraints
@@ -197,15 +229,3 @@
 - **10.3 Regression and usability checks**
 - Verify that users are **never left with no feedback**: every failure path must have a clear explanation and at least one actionable next step (retry, switch mode, check connection).
 - Confirm that existing flows (e.g. accessing past notes, summaries, quizzes) still work seamlessly with the new job-based transcription pipeline.
-
-### To-dos
-
-- [ ] Phase 5: Text-to-Speech (TTS) Feature
-- [ ] Integrate Google Cloud TTS with Neural2/WaveNet voices
-- [ ] Add voice selection UI to Flutter TTS page
-- [ ] Design the TranscriptionJob Firestore schema and end-to-end state machine for transcription jobs.
-- [ ] Implement the online Soniox transcription pipeline using Storage uploads, job workers, chunking/async processing, and structured error handling.
-- [ ] Harden the offline Whisper path with model integrity checks, single-context reuse, robust error mapping, and background processing.
-- [ ] Implement mode selection, fallback logic, and long-job UX in the Flutter BLoC and UI, including clear states and retry actions.
-- [ ] Add structured logging, basic metrics, retention policies, and cost guards for Storage, Functions, and Firestore.
-- [ ] Create and execute a test plan (unit, integration, manual) covering short, medium, and long recordings, noisy environments, and network edge cases.

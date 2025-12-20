@@ -34,12 +34,11 @@ Before you begin, ensure you have the following installed:
 - **Dart SDK** (>=3.2.0)
   - Included with Flutter installation
 
-- **Node.js** (>=20.0.0)
-  - Required for Firebase Functions
+- **Node.js** (>=20.0.0) (Optional - only needed if deploying your own Firebase Functions)
   - Download: https://nodejs.org/
   - Verify: `node --version`
 
-- **Firebase CLI**
+- **Firebase CLI** (Optional - only needed if deploying your own Firebase Functions)
   - Install: `npm install -g firebase-tools`
   - Verify: `firebase --version`
 
@@ -91,12 +90,6 @@ After installing prerequisites, verify your setup:
 ```bash
 # Check Flutter installation and environment
 flutter doctor -v
-
-# Verify Node.js version
-node --version  # Should be >=20.0.0
-
-# Verify Firebase CLI
-firebase --version
 
 # Verify CocoaPods (macOS/iOS only)
 pod --version
@@ -195,65 +188,16 @@ ls -lh assets/models/*.bin
 # Should show ggml-base.en.bin and/or ggml-tiny.en.bin
 ```
 
-### 2.2 Firebase Configuration Files (REQUIRED)
+### 2.2 Firebase Configuration Files ✅ ALREADY INCLUDED
 
-Firebase config files are not in the repository for security reasons. You have two options:
+Firebase config files are already included in the repository. No action needed!
 
-#### Option A: Use FlutterFire CLI (Recommended)
+Files included:
+- `android/app/google-services.json` ✅
+- `ios/GoogleService-Info.plist` ✅
+- `lib/firebase_options.dart` ✅
 
-This automatically generates all Firebase config files:
-
-```bash
-# Install FlutterFire CLI
-dart pub global activate flutterfire_cli
-
-# Configure Firebase (interactive setup)
-flutterfire configure
-```
-
-This will:
-- Generate `lib/firebase_options.dart`
-- Download `android/app/google-services.json`
-- Download `ios/GoogleService-Info.plist`
-
-#### Option B: Manual Download from Firebase Console
-
-1. **Create or Select Firebase Project**
-   - Go to [Firebase Console](https://console.firebase.google.com)
-   - Create a new project or select existing one
-   - Note your project ID
-
-2. **For Android:**
-   - Firebase Console → Project Settings → Your apps
-   - Click "Add app" → Android (if not already added)
-   - Package name: `com.example.smart_tutor_lite`
-   - Download `google-services.json`
-   - Place in: `android/app/google-services.json`
-
-3. **For iOS:**
-   - Firebase Console → Project Settings → Your apps
-   - Click "Add app" → iOS (if not already added)
-   - Bundle ID: `com.example.smartTutorLite`
-   - Download `GoogleService-Info.plist`
-   - Place in: `ios/GoogleService-Info.plist`
-
-4. **Generate firebase_options.dart:**
-   ```bash
-   dart pub global activate flutterfire_cli
-   flutterfire configure --project=your-project-id
-   ```
-
-**Verify Installation:**
-```bash
-# Check Android config
-ls android/app/google-services.json
-
-# Check iOS config (macOS only)
-ls ios/GoogleService-Info.plist
-
-# Check Dart options
-ls lib/firebase_options.dart
-```
+Firebase Functions are pre-deployed and configured. You can build and run immediately!
 
 ---
 
@@ -267,23 +211,10 @@ flutter pub get
 
 This installs all Flutter packages listed in `pubspec.yaml`.
 
-### 3.2 Install Firebase Functions Dependencies
-
-```bash
-cd functions
-npm install
-cd ..
-```
-
-This installs Node.js packages for Firebase Functions.
-
 **Verify Installation:**
 ```bash
 # Check Flutter packages
 flutter pub get  # Should complete without errors
-
-# Check Node packages
-cd functions && ls node_modules && cd ..
 ```
 
 ---
@@ -352,77 +283,18 @@ cmake --version  # Should show >=3.22.1
 
 ---
 
-## Step 5: Configure Firebase
+## Step 5: Firebase Configuration ✅ Pre-configured
 
-### 5.1 Firebase Project Setup
+Firebase is already configured and Functions are deployed. No setup required!
 
-If you haven't already created a Firebase project:
+**What's included:**
+- ✅ Client config files (`google-services.json`, `GoogleService-Info.plist`, `firebase_options.dart`) - Already in repository
+- ✅ Firebase Functions - Pre-deployed with API keys configured
+- ✅ All AI services (OpenAI, Google Cloud TTS, Soniox) - Already configured
 
-1. Go to [Firebase Console](https://console.firebase.google.com)
-2. Click "Add project" or select existing project
-3. Enable required services:
-   - **Firestore Database** - Enable in test mode (or production with rules)
-   - **Firebase Storage** - Enable
-   - **Firebase Authentication** - Enable (optional, for user features)
-   - **Cloud Functions** - Enable (required for AI features)
+**For Judges/Evaluators:** Just build and run - everything works out of the box!
 
-### 5.2 Firebase Functions Setup
-
-#### Install Dependencies (if not already done):
-
-```bash
-cd functions
-npm install
-cd ..
-```
-
-#### Set API Keys
-
-Firebase Functions require API keys for AI services. Set them via Firebase CLI:
-
-```bash
-# Set OpenAI API key (required for summarization, quizzes, flashcards)
-firebase functions:config:set openai.api_key="YOUR_OPENAI_API_KEY"
-
-# Set ElevenLabs API key (optional, for TTS feature)
-firebase functions:config:set elevenlabs.api_key="YOUR_ELEVENLABS_API_KEY"
-
-# Set Soniox API key (optional, for online transcription)
-firebase functions:config:set soniox.api_key="YOUR_SONIOX_API_KEY"
-```
-
-**Get API Keys:**
-- OpenAI: https://platform.openai.com/api-keys
-- ElevenLabs: https://elevenlabs.io/app/settings/api-keys
-- Soniox: https://www.soniox.com/
-
-#### Build Functions
-
-```bash
-cd functions
-npm run build
-cd ..
-```
-
-This compiles TypeScript to JavaScript in `functions/lib/`.
-
-#### Deploy Functions (Optional - for production)
-
-```bash
-firebase login
-firebase deploy --only functions
-```
-
-**Note**: Functions can be tested locally without deployment. For local testing, see [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
-
-**Verify Configuration:**
-```bash
-# Check Firebase config
-firebase functions:config:get
-
-# Check compiled functions
-ls functions/lib/
-```
+**For Developers:** If you want to deploy your own Firebase Functions, see [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md) for detailed setup instructions.
 
 ---
 
@@ -579,14 +451,14 @@ ls ios/Runner/third_party/whisper.cpp/  # iOS
 
 #### 2. "Firebase not configured" or "firebase_options.dart not found"
 
-**Solution:**
+**Note:** Firebase config files are already included in the repository. If you see this error, verify the files exist:
 ```bash
-# Install FlutterFire CLI
-dart pub global activate flutterfire_cli
-
-# Configure Firebase
-flutterfire configure
+ls lib/firebase_options.dart
+ls android/app/google-services.json
+ls ios/GoogleService-Info.plist
 ```
+
+If files are missing, they should be in the repository. Check that you cloned the complete repository.
 
 #### 3. "CMake not found" or "NDK not found" (Android)
 
@@ -608,14 +480,9 @@ cd ..
 
 #### 5. "OpenAI API key not found" (Firebase Functions)
 
-**Solution:**
-```bash
-# Set API key
-firebase functions:config:set openai.api_key="YOUR_KEY"
+**Note:** Firebase Functions are pre-deployed with API keys configured. If you see this error, it means you're trying to run functions locally. For judges/evaluators, functions are already deployed - no action needed.
 
-# Verify
-firebase functions:config:get
-```
+**For developers deploying their own functions:** See [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md) for API key setup.
 
 #### 6. Build fails with "MissingPluginException"
 
@@ -688,8 +555,6 @@ Before considering setup complete, verify all items:
 ### Prerequisites
 - [ ] Flutter SDK installed and in PATH
 - [ ] Dart SDK included with Flutter
-- [ ] Node.js (>=20.0.0) installed
-- [ ] Firebase CLI installed
 - [ ] Android Studio installed (for Android builds)
 - [ ] Android NDK installed
 - [ ] CMake (>=3.22.1) installed
@@ -705,13 +570,11 @@ Before considering setup complete, verify all items:
 - [ ] `GoogleService-Info.plist` in `ios/` (iOS builds)
 - [ ] `firebase_options.dart` in `lib/`
 - [ ] Flutter dependencies installed (`flutter pub get` succeeded)
-- [ ] Firebase Functions dependencies installed (`npm install` in functions/)
 - [ ] Generated code files created (`injection_container.config.dart`)
 - [ ] CocoaPods installed (iOS only, `ios/Pods/` exists)
 
 ### Configuration
-- [ ] Firebase project created and configured
-- [ ] Firebase Functions API keys set (if deploying functions)
+- [ ] Firebase configuration files verified (already included)
 - [ ] Android NDK and CMake verified
 - [ ] iOS signing configured (iOS builds)
 
@@ -744,9 +607,9 @@ If you're preparing the project for judges to test, provide the following:
    - README.md
    - SETUP.md
 
-4. **Firebase Configuration (Optional)**
-   - Provide Firebase config files OR instructions for judges to add their own
-   - Instructions to set up Firebase project
+4. **Firebase Configuration** ✅ Already included
+   - Firebase config files are already in the repository
+   - Firebase Functions are pre-deployed
 
 ### Optional Files
 
@@ -770,13 +633,13 @@ If you're preparing the project for judges to test, provide the following:
 Judges will need to:
 1. Clone the repository
 2. Download Whisper models (via `bash scripts/setup_whisper.sh`)
-3. Set up Firebase project and download config files
-4. Install dependencies
+3. Install Flutter dependencies (`flutter pub get`)
+4. Generate code (`flutter pub run build_runner build --delete-conflicting-outputs`)
 5. Build the app OR use pre-built APK
 
 **For easiest testing, provide:**
 - Pre-built APK they can install directly
-- Clear instructions for Firebase setup
+- Firebase is already configured - no setup needed!
 - Link to this BUILD_INSTRUCTIONS.md
 
 ---
@@ -792,13 +655,8 @@ cd smart_tutor_lite
 # Download Whisper models and sources
 bash scripts/setup_whisper.sh
 
-# Configure Firebase
-dart pub global activate flutterfire_cli
-flutterfire configure
-
-# Install dependencies
+# Install Flutter dependencies
 flutter pub get
-cd functions && npm install && cd ..
 
 # Setup iOS (macOS only)
 cd ios && pod install && cd ..

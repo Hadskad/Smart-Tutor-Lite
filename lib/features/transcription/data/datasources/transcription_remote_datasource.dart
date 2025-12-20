@@ -66,6 +66,7 @@ class TranscriptionRemoteDataSourceImpl
       final response = await _apiClient.post<Map<String, dynamic>>(
         '${ApiConstants.transcription}/$id/format',
         parser: (data) => Map<String, dynamic>.from(data as Map),
+        maxRetries: 3,
       );
       // Extract transcription from response
       final transcriptionData =

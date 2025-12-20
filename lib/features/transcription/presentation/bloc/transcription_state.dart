@@ -4,20 +4,25 @@ import '../../domain/entities/transcription.dart';
 import '../../domain/entities/transcription_job.dart';
 import '../../domain/entities/transcription_preferences.dart';
 import '../../../../native_bridge/performance_bridge.dart';
+import 'queued_transcription_job.dart';
 
 abstract class TranscriptionState extends Equatable {
   const TranscriptionState({
     this.history = const <Transcription>[],
     this.preferences = const TranscriptionPreferences(),
     this.queueLength = 0,
+    this.queue = const <QueuedTranscriptionJob>[],
+    this.formattingTranscriptionId,
   });
 
   final List<Transcription> history;
   final TranscriptionPreferences preferences;
   final int queueLength;
+  final List<QueuedTranscriptionJob> queue;
+  final String? formattingTranscriptionId;
 
   @override
-  List<Object?> get props => [history, preferences, queueLength];
+  List<Object?> get props => [history, preferences, queueLength, queue, formattingTranscriptionId];
 }
 
 class TranscriptionInitial extends TranscriptionState {
@@ -25,6 +30,8 @@ class TranscriptionInitial extends TranscriptionState {
     super.history = const [],
     super.preferences = const TranscriptionPreferences(),
     super.queueLength = 0,
+    super.queue = const [],
+    super.formattingTranscriptionId,
   });
 }
 
@@ -37,6 +44,8 @@ class TranscriptionNotice extends TranscriptionState {
     super.history = const [],
     super.preferences = const TranscriptionPreferences(),
     super.queueLength = 0,
+    super.queue = const [],
+    super.formattingTranscriptionId,
   });
 
   final String message;
@@ -55,6 +64,8 @@ class TranscriptionRecording extends TranscriptionState {
     super.history = const [],
     super.preferences = const TranscriptionPreferences(),
     super.queueLength = 0,
+    super.queue = const [],
+    super.formattingTranscriptionId,
   });
 
   final DateTime startedAt;
@@ -70,6 +81,8 @@ class TranscriptionRecording extends TranscriptionState {
     List<Transcription>? history,
     TranscriptionPreferences? preferences,
     int? queueLength,
+    List<QueuedTranscriptionJob>? queue,
+    String? formattingTranscriptionId,
   }) {
     return TranscriptionRecording(
       startedAt: startedAt ?? this.startedAt,
@@ -79,6 +92,8 @@ class TranscriptionRecording extends TranscriptionState {
       history: history ?? this.history,
       preferences: preferences ?? this.preferences,
       queueLength: queueLength ?? this.queueLength,
+      queue: queue ?? this.queue,
+      formattingTranscriptionId: formattingTranscriptionId ?? this.formattingTranscriptionId,
     );
   }
 
@@ -98,6 +113,8 @@ class TranscriptionProcessing extends TranscriptionState {
     super.history = const [],
     super.preferences = const TranscriptionPreferences(),
     super.queueLength = 0,
+    super.queue = const [],
+    super.formattingTranscriptionId,
   });
 
   final String audioPath;
@@ -113,6 +130,8 @@ class TranscriptionSuccess extends TranscriptionState {
     required super.history,
     super.preferences = const TranscriptionPreferences(),
     super.queueLength = 0,
+    super.queue = const [],
+    super.formattingTranscriptionId,
   });
 
   final Transcription transcription;
@@ -128,6 +147,8 @@ class TranscriptionError extends TranscriptionState {
     super.history = const [],
     super.preferences = const TranscriptionPreferences(),
     super.queueLength = 0,
+    super.queue = const [],
+    super.formattingTranscriptionId,
   });
 
   final String message;
@@ -142,6 +163,8 @@ class CloudTranscriptionState extends TranscriptionState {
     super.history = const [],
     super.preferences = const TranscriptionPreferences(),
     super.queueLength = 0,
+    super.queue = const [],
+    super.formattingTranscriptionId,
   });
 
   final TranscriptionJob job;
@@ -152,6 +175,8 @@ class CloudTranscriptionState extends TranscriptionState {
       history: history,
       preferences: preferences,
       queueLength: queueLength,
+      queue: queue,
+      formattingTranscriptionId: formattingTranscriptionId,
     );
   }
 
@@ -168,6 +193,8 @@ class TranscriptionFallbackPrompt extends TranscriptionState {
     super.history = const [],
     super.preferences = const TranscriptionPreferences(),
     super.queueLength = 0,
+    super.queue = const [],
+    super.formattingTranscriptionId,
   });
 
   final String audioPath;

@@ -86,10 +86,15 @@ class _QuizCreationPageState extends State<QuizCreationPage> {
                 .map((t) => {
                       'id': t.id,
                       'title': t.title ??
-                          (t.text.length > 50
-                              ? '${t.text.substring(0, 50)}...'
-                              : t.text),
+                          (t.text != null && t.text!.length > 50
+                              ? '${t.text!.substring(0, 50)}...'
+                              : t.text) ?? 'Untitled Note',
                       'date': DateFormat('MMM d, y').format(t.timestamp),
+                    })
+                .map((m) => {
+                      'id': m['id'] as String,
+                      'title': m['title'] as String,
+                      'date': m['date'] as String,
                     })
                 .toList();
           });

@@ -8,12 +8,12 @@ import '../models/tts_job_model.dart';
 abstract class TtsRemoteDataSource {
   Future<TtsJobModel> convertPdfToAudio({
     required String pdfUrl,
-    String voice = 'en-US-Standard-B',
+    String voice = 'en-US-Neural2-D',
   });
 
   Future<TtsJobModel> convertTextToAudio({
     required String text,
-    String voice = 'en-US-Standard-B',
+    String voice = 'en-US-Neural2-D',
   });
 
   Future<TtsJobModel> getTtsJob(String id);
@@ -28,7 +28,7 @@ class TtsRemoteDataSourceImpl implements TtsRemoteDataSource {
   @override
   Future<TtsJobModel> convertPdfToAudio({
     required String pdfUrl,
-    String voice = 'en-US-Standard-B',
+    String voice = 'en-US-Neural2-D',
   }) async {
     try {
       final response = await _apiClient.post<Map<String, dynamic>>(
@@ -52,7 +52,7 @@ class TtsRemoteDataSourceImpl implements TtsRemoteDataSource {
   @override
   Future<TtsJobModel> convertTextToAudio({
     required String text,
-    String voice = 'en-US-Standard-B',
+    String voice = 'en-US-Neural2-D',
   }) async {
     try {
       final response = await _apiClient.post<Map<String, dynamic>>(
@@ -89,4 +89,3 @@ class TtsRemoteDataSourceImpl implements TtsRemoteDataSource {
     }
   }
 }
-

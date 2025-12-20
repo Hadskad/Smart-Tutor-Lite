@@ -3,7 +3,7 @@ import '../../domain/entities/transcription.dart';
 class TranscriptionModel extends Transcription {
   const TranscriptionModel({
     required super.id,
-    required super.text,
+    super.text,
     required super.audioPath,
     required super.duration,
     required super.timestamp,
@@ -11,6 +11,11 @@ class TranscriptionModel extends Transcription {
     super.metadata = const <String, dynamic>{},
     super.title,
     super.structuredNote,
+    super.isFailed = false,
+    super.failureType,
+    super.errorMessage,
+    super.originalJobId,
+    super.fileSizeBytes,
   });
 
   factory TranscriptionModel.fromJson(Map<String, dynamic> json) {
@@ -26,7 +31,7 @@ class TranscriptionModel extends Transcription {
 
     return TranscriptionModel(
       id: json['id'] as String? ?? '',
-      text: json['text'] as String? ?? '',
+      text: json['text'] as String?,
       audioPath: json['audio_path'] as String? ?? '',
       duration: Duration(
         milliseconds: json['duration_ms'] is int
@@ -46,13 +51,20 @@ class TranscriptionModel extends Transcription {
       ),
       title: title,
       structuredNote: structuredNote,
+      isFailed: json['is_failed'] as bool? ?? false,
+      failureType: json['failure_type'] as String?,
+      errorMessage: json['error_message'] as String?,
+      originalJobId: json['original_job_id'] as String?,
+      fileSizeBytes: json['file_size_bytes'] is int
+          ? json['file_size_bytes'] as int
+          : (json['file_size_bytes'] as num?)?.toInt(),
     );
   }
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': id,
-      'text': text,
+      if (text != null) 'text': text,
       'audio_path': audioPath,
       'duration_ms': duration.inMilliseconds,
       'timestamp': timestamp.toIso8601String(),
@@ -60,6 +72,11 @@ class TranscriptionModel extends Transcription {
       'metadata': metadata,
       if (title != null) 'title': title,
       if (structuredNote != null) 'structured_note': structuredNote,
+      if (isFailed) 'is_failed': isFailed,
+      if (failureType != null) 'failure_type': failureType,
+      if (errorMessage != null) 'error_message': errorMessage,
+      if (originalJobId != null) 'original_job_id': originalJobId,
+      if (fileSizeBytes != null) 'file_size_bytes': fileSizeBytes,
     };
   }
 
@@ -73,6 +90,11 @@ class TranscriptionModel extends Transcription {
     Map<String, dynamic>? metadata,
     String? title,
     Map<String, dynamic>? structuredNote,
+    bool? isFailed,
+    String? failureType,
+    String? errorMessage,
+    String? originalJobId,
+    int? fileSizeBytes,
   }) {
     return TranscriptionModel(
       id: id ?? this.id,
@@ -84,6 +106,11 @@ class TranscriptionModel extends Transcription {
       metadata: metadata ?? this.metadata,
       title: title ?? this.title,
       structuredNote: structuredNote ?? this.structuredNote,
+      isFailed: isFailed ?? this.isFailed,
+      failureType: failureType ?? this.failureType,
+      errorMessage: errorMessage ?? this.errorMessage,
+      originalJobId: originalJobId ?? this.originalJobId,
+      fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
     );
   }
 
@@ -100,6 +127,11 @@ class TranscriptionModel extends Transcription {
       structuredNote: entity.structuredNote != null
           ? Map<String, dynamic>.from(entity.structuredNote!)
           : null,
+      isFailed: entity.isFailed,
+      failureType: entity.failureType,
+      errorMessage: entity.errorMessage,
+      originalJobId: entity.originalJobId,
+      fileSizeBytes: entity.fileSizeBytes,
     );
   }
 
@@ -114,6 +146,11 @@ class TranscriptionModel extends Transcription {
       metadata: metadata,
       title: title,
       structuredNote: structuredNote,
+      isFailed: isFailed,
+      failureType: failureType,
+      errorMessage: errorMessage,
+      originalJobId: originalJobId,
+      fileSizeBytes: fileSizeBytes,
     );
   }
 }

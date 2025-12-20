@@ -19,7 +19,7 @@ class TtsJob extends Equatable {
   final String audioUrl; // URL to the generated audio file
   final String status; // 'pending', 'processing', 'completed', 'failed'
   final DateTime createdAt;
-  final String? voice; // Voice name (e.g., 'en-US-Standard-B')
+  final String? voice; // Voice name (e.g., 'en-US-Neural2-D')
   final String? errorMessage; // Error message if status is 'failed'
 
   @override
@@ -34,4 +34,3 @@ class TtsJob extends Equatable {
         errorMessage,
       ];
 }
-

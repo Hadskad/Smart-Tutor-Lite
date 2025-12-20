@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:smart_tutor_lite/app/routes.dart';
+import 'package:smart_tutor_lite/injection_container.dart';
+import '../../../../features/study_folders/presentation/bloc/study_folders_bloc.dart';
+import '../../../../features/study_folders/presentation/bloc/study_folders_event.dart';
+import '../../../../features/study_folders/presentation/bloc/study_folders_state.dart';
+import '../widgets/create_folder_dialog.dart';
+import '../widgets/study_folders_section.dart';
 
 // --- Local Color Palette for Home Dashboard ---
 
@@ -12,86 +19,147 @@ const Color _kWhite = Colors.white;
 const Color _kLightGray = Color(0xFFCCCCCC);
 const Color _kDarkGray = Color(0xFF888888);
 
-class HomeDashboardPage extends StatelessWidget {
+class HomeDashboardPage extends StatefulWidget {
   const HomeDashboardPage({super.key});
 
   @override
+  State<HomeDashboardPage> createState() => _HomeDashboardPageState();
+}
+
+class _HomeDashboardPageState extends State<HomeDashboardPage> {
+  late final StudyFoldersBloc _studyFoldersBloc;
+
+  @override
+  void initState() {
+    super.initState();
+    _studyFoldersBloc = getIt<StudyFoldersBloc>();
+    // Load folders on page initialization
+    _studyFoldersBloc.add(const LoadFoldersEvent());
+  }
+
+  @override
+  void dispose() {
+    _studyFoldersBloc.close();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _kBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: _kBackgroundColor,
-        elevation: 0,
-        centerTitle: false,
-        title: _HeaderTitle(),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: _ProfileIconButton(
-              onTap: () {
-                Navigator.pushNamed(context, AppRoutes.profile);
-              },
-            ),
+    return BlocProvider.value(
+      value: _studyFoldersBloc,
+      child: BlocListener<StudyFoldersBloc, StudyFoldersState>(
+        listener: (context, state) {
+          if (state is StudyFoldersError) {
+            // Show error message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+        child: Scaffold(
+          backgroundColor: _kBackgroundColor,
+          appBar: AppBar(
+            backgroundColor: _kBackgroundColor,
+            elevation: 0,
+            centerTitle: false,
+            title: _HeaderTitle(),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: _ProfileIconButton(
+                  onTap: () {
+                    Navigator.pushNamed(context, AppRoutes.profile);
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 5.0),
-            child: Column(
-              children: [
-                const SizedBox(height: 16.0),
-                const _SearchBarWidget(),
-                const SizedBox(height: 32.0),
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.5,
-                  width: double.infinity,
-                  child: _FeatureCardsGrid(
-                    onNoteTakerTap: () {
-                      Navigator.pushNamed(context, AppRoutes.transcription);
-                    },
-                    onSummaryTap: () {
-                      Navigator.pushNamed(context, AppRoutes.summarization);
-                    },
-                    onPracticeTap: () {
-                      Navigator.pushNamed(context, AppRoutes.quiz);
-                    },
-                    onAudioNotesTap: () {
-                      Navigator.pushNamed(context, AppRoutes.tts);
-                    },
-                  ),
-                ),
-                const SizedBox(height: 16.0),
-                SizedBox(
-                  width: double.infinity,
-                  height: 70,
-                  child: _FeatureCard(
-                    title: 'Study Mode',
-                    subtitle: 'Flashcards',
-                    icon: Icons.quiz_outlined,
-                    iconColor: _kAccentBlue,
-                    isLarge: false,
-                    isHorizontal: true,
-                    cardColor: _kCardColor,
-                    onTap: () {
-                      Navigator.pushNamed(context, AppRoutes.studyMode);
-                    },
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5.0),
+                child: Column(
                   children: [
-                    Text('My Courses:',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _kLightGray,
-                            fontSize: 22)),
+                    const SizedBox(height: 16.0),
+                    const _SearchBarWidget(),
+                    const SizedBox(height: 32.0),
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.5,
+                      width: double.infinity,
+                      child: _FeatureCardsGrid(
+                        onNoteTakerTap: () {
+                          Navigator.pushNamed(context, AppRoutes.transcription);
+                        },
+                        onSummaryTap: () {
+                          Navigator.pushNamed(context, AppRoutes.summarization);
+                        },
+                        onPracticeTap: () {
+                          Navigator.pushNamed(context, AppRoutes.quiz);
+                        },
+                        onAudioNotesTap: () {
+                          Navigator.pushNamed(context, AppRoutes.tts);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16.0),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 70,
+                      child: _FeatureCard(
+                        title: 'Study Mode',
+                        subtitle: 'Flashcards',
+                        icon: Icons.quiz_outlined,
+                        iconColor: _kAccentBlue,
+                        isLarge: false,
+                        isHorizontal: true,
+                        cardColor: _kCardColor,
+                        onTap: () {
+                          Navigator.pushNamed(context, AppRoutes.studyMode);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Text('My Courses:',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _kLightGray,
+                                fontSize: 22)),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    // Study Folders Grid Section
+                    StudyFoldersSection(
+                      onCreateFolderTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (dialogContext) => BlocProvider.value(
+                            value: _studyFoldersBloc,
+                            child: const CreateFolderDialog(),
+                          ),
+                        );
+                      },
+                      onFolderTap: (folderId, folderName) {
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.studyFolderDetail,
+                          arguments: {
+                            'folderId': folderId,
+                            'folderName': folderName,
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
-                const SizedBox(height: 20),
-              ],
+              ),
             ),
           ),
         ),
@@ -108,9 +176,8 @@ class _HeaderTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-    
       mainAxisSize: MainAxisSize.min,
-      children:  [
+      children: [
         Text(
           'Hi, Learner!',
           style: TextStyle(
@@ -330,7 +397,7 @@ class _FeatureCard extends StatelessWidget {
         ),
         child: isHorizontal
             ? Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(

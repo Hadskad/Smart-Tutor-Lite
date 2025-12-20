@@ -25,6 +25,12 @@ class AudioRecorderWidget extends StatelessWidget {
         final startedAt = isRecording ? state.startedAt : null;
         final approxSizeBytes = isRecording ? state.estimatedSizeBytes : null;
         final isInputTooLow = isRecording ? state.isInputTooLow : false;
+        
+        // Check queue size - max is 10
+        const maxQueueSize = 10;
+        final queueLength = state.queue.length;
+        final isQueueFull = queueLength >= maxQueueSize;
+        final canStartRecording = !isQueueFull || isRecording;
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -43,6 +49,10 @@ class AudioRecorderWidget extends StatelessWidget {
               const SizedBox(height: 12),
               const _LowInputWarning(),
             ],
+            if (!isRecording && isQueueFull) ...[
+              const SizedBox(height: 12),
+              const _QueueFullWarning(),
+            ],
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -56,8 +66,10 @@ class AudioRecorderWidget extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
+                  disabledBackgroundColor: _kDarkGray.withOpacity(0.5),
+                  disabledForegroundColor: _kLightGray,
                 ),
-                onPressed: (state is TranscriptionProcessing && isRecording)
+                onPressed: (state is TranscriptionProcessing && isRecording) || !canStartRecording
                     ? null
                     : () {
                         final bloc = context.read<TranscriptionBloc>();
@@ -81,9 +93,11 @@ class AudioRecorderWidget extends StatelessWidget {
                 label: Text(
                   (state is TranscriptionProcessing && isRecording)
                       ? 'Stopping...'
-                      : (isRecording
-                          ? 'Stop Note Taking'
-                          : 'Start Note Taking'),
+                      : (!canStartRecording
+                          ? 'Queue Full ($queueLength/$maxQueueSize)'
+                          : (isRecording
+                              ? 'Stop Note Taking'
+                              : 'Start Note Taking')),
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -336,6 +350,39 @@ class _LowInputWarning extends StatelessWidget {
           Expanded(
             child: Text(
               'We are hearing very little audio. Move closer or uncover the mic.',
+              style: const TextStyle(
+                color: _kAccentCoral,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QueueFullWarning extends StatelessWidget {
+  const _QueueFullWarning();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _kAccentCoral.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _kAccentCoral.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.queue_music_rounded, color: _kAccentCoral),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'You have 10 pending transcriptions. Please wait or cancel some items.',
               style: const TextStyle(
                 color: _kAccentCoral,
                 fontSize: 12,

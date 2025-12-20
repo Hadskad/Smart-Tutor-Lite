@@ -15,7 +15,7 @@ import '../models/tts_job_model.dart';
 import '../models/tts_queue_model.dart';
 
 const _ttsJobCacheBox = 'tts_job_cache';
-const _defaultElevenLabsVoiceId = '21m00Tcm4TlvDq8ikWAM';
+const _defaultGoogleVoiceId = 'en-US-Neural2-D';
 
 @LazySingleton(as: TtsRepository)
 class TtsRepositoryImpl implements TtsRepository {
@@ -75,7 +75,7 @@ class TtsRepositoryImpl implements TtsRepository {
   @override
   Future<Either<Failure, TtsJob>> convertPdfToAudio({
     required String pdfUrl,
-    String voice = _defaultElevenLabsVoiceId,
+    String voice = _defaultGoogleVoiceId,
   }) async {
     try {
       // Check if online before attempting remote call
@@ -124,7 +124,7 @@ class TtsRepositoryImpl implements TtsRepository {
   @override
   Future<Either<Failure, TtsJob>> convertTextToAudio({
     required String text,
-    String voice = _defaultElevenLabsVoiceId,
+    String voice = _defaultGoogleVoiceId,
   }) async {
     try {
       // Check if online before attempting remote call

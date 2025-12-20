@@ -6,11 +6,14 @@ import '../../../study_mode/presentation/bloc/study_mode_event.dart';
 import '../../../study_mode/presentation/bloc/study_mode_state.dart';
 import '../../domain/entities/transcription.dart';
 import '../../domain/entities/transcription_job.dart';
+import '../../domain/repositories/transcription_repository.dart';
 import '../bloc/transcription_bloc.dart';
 import '../bloc/transcription_event.dart';
 import '../bloc/transcription_state.dart';
 import '../widgets/audio_recorder_widget.dart';
 import '../widgets/note_list_card.dart';
+import '../widgets/queued_job_card.dart';
+import '../bloc/queued_transcription_job.dart';
 import 'note_detail_page.dart';
 
 // --- Color Palette (matching home dashboard) ---
@@ -45,7 +48,6 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
 
   @override
   void dispose() {
-    _bloc.close();
     _studyModeBloc.close();
     super.dispose();
   }
@@ -184,12 +186,11 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                     constraints: const BoxConstraints(maxWidth: 600),
                     child: Padding(
                       padding: const EdgeInsets.all(20),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Enhanced Recorder Widget Container
-                            Container(
+                      child: CustomScrollView(
+                        slivers: [
+                          // Enhanced Recorder Widget Container
+                          SliverToBoxAdapter(
+                            child: Container(
                               padding: const EdgeInsets.all(24),
                               decoration: BoxDecoration(
                                 color: _kCardColor,
@@ -204,18 +205,30 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                               ),
                               child: const AudioRecorderWidget(),
                             ),
-                            const SizedBox(height: 24),
-                            _ModeToggle(
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                          SliverToBoxAdapter(
+                            child: _ModeToggle(
                               value: state.preferences.alwaysUseOffline,
                             ),
-                            const SizedBox(height: 8),
-                            _FastModelToggle(
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                          SliverToBoxAdapter(
+                            child: _FastModelToggle(
                               value: state.preferences.useFastWhisperModel,
                             ),
-                            const SizedBox(height: 16),
-                            _buildStatus(state),
-                            const SizedBox(height: 24),
-                            Row(
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                          SliverToBoxAdapter(
+                            child: _buildStatus(state),
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                          SliverToBoxAdapter(
+                            child: _buildPendingTranscriptions(state.queue),
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                          SliverToBoxAdapter(
+                            child: Row(
                               children: [
                                 Text(
                                   'Recent Notes',
@@ -228,18 +241,20 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                                 const Spacer(),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                          SliverToBoxAdapter(
+                            child: Text(
                               'You can leave this page—jobs keep running in the background and appear here when ready.',
                               style: const TextStyle(
                                 color: _kLightGray,
                                 fontSize: 14,
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            _buildHistory(state.history),
-                          ],
-                        ),
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                          _buildHistorySliver(state.history),
+                        ],
                       ),
                     ),
                   ),
@@ -421,67 +436,253 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
     }
   }
 
-  Widget _buildHistory(List<Transcription> history) {
-    if (history.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildPendingTranscriptions(List<QueuedTranscriptionJob> queue) {
+    // Show all non-empty queue items (including success for brief period)
+    // Success jobs will be in Recent Notes, but we show them here temporarily
+    // with a "View note" button
+    if (queue.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Icon(
-              Icons.mic_none_rounded,
-              size: 64,
-              color: _kDarkGray,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No transcriptions yet',
-              style: TextStyle(
-                color: _kLightGray,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
+            Text(
+              'Pending Transcriptions (${queue.length})',
+              style: const TextStyle(
+                color: _kWhite,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Record something to get started!',
-              style: TextStyle(
-                color: _kDarkGray,
-                fontSize: 14,
-              ),
-            ),
+            const Spacer(),
           ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'These recordings are waiting to be processed or are currently being transcribed.',
+          style: const TextStyle(
+            color: _kLightGray,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 16),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: queue.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final job = queue[index];
+            return QueuedJobCard(
+              job: job,
+              onCancel: job.status == QueuedTranscriptionJobStatus.waiting ||
+                      job.status == QueuedTranscriptionJobStatus.failed
+                  ? () {
+                      context
+                          .read<TranscriptionBloc>()
+                          .add(QueueJobCancelled(job.id));
+                    }
+                  : null,
+              onRetry: job.status == QueuedTranscriptionJobStatus.failed
+                  ? () {
+                      context
+                          .read<TranscriptionBloc>()
+                          .add(QueueJobRetried(job.id));
+                    }
+                  : null,
+              onViewNote: job.status == QueuedTranscriptionJobStatus.success &&
+                      job.noteId != null
+                  ? () {
+                      _navigateToNote(context, job.noteId!);
+                    }
+                  : null,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _navigateToNote(BuildContext context, String noteId) async {
+    try {
+      // Find transcription in history by noteId
+      final bloc = context.read<TranscriptionBloc>();
+      final currentState = bloc.state;
+
+      // Try to find in history first (fast path)
+      Transcription? transcription;
+      try {
+        transcription = currentState.history.firstWhere(
+          (t) => t.id == noteId,
+        );
+      } catch (e) {
+        // Not in history - will fetch from repository (handles race condition)
+        transcription = null;
+      }
+
+      // If not in history (race condition), fetch from repository
+      if (transcription == null) {
+        try {
+          final repository = getIt<TranscriptionRepository>();
+          final result = await repository.getTranscription(noteId);
+
+          final fetchedTranscription = result.fold<Transcription?>(
+            (failure) {
+              // Show error and return null
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Note not found. It may have been deleted.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              return null;
+            },
+            (t) => t,
+          );
+
+          if (fetchedTranscription == null) {
+            return; // Error already shown
+          }
+
+          transcription = fetchedTranscription;
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error loading note: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          debugPrint('Error fetching transcription in _navigateToNote: $e');
+          return;
+        }
+      }
+
+      // Navigate to note detail page with error handling
+      // At this point, transcription is guaranteed to be non-null
+      // (either found in history or successfully fetched from repository)
+      if (context.mounted) {
+        try {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NoteDetailPage(
+                transcription: transcription!,
+              ),
+            ),
+          );
+        } catch (e) {
+          // Handle navigation failures gracefully
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Unable to open note: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          debugPrint('Navigation error in _navigateToNote: $e');
+        }
+      }
+    } catch (e) {
+      // Catch any unexpected errors (e.g., bloc/repository access failures)
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('An unexpected error occurred: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      debugPrint('Unexpected error in _navigateToNote: $e');
+    }
+  }
+
+  Widget _buildHistorySliver(List<Transcription> history) {
+    if (history.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 64),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.mic_none_rounded,
+                  size: 64,
+                  color: _kDarkGray,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No transcriptions yet',
+                  style: TextStyle(
+                    color: _kLightGray,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Record something to get started!',
+                  style: TextStyle(
+                    color: _kDarkGray,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }
 
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return SliverList.separated(
       itemCount: history.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final transcription = history[index];
+        final isFailed = transcription.isFailed;
+
         return NoteListCard(
           transcription: transcription,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => NoteDetailPage(
-                  transcription: transcription,
-                ),
-              ),
-            );
-          },
-          onEditTitle: () {
-            _showEditTitleDialog(context, transcription);
-          },
+          onTap: isFailed
+              ? null
+              : () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NoteDetailPage(
+                        transcription: transcription,
+                      ),
+                    ),
+                  );
+                },
+          onEditTitle: isFailed
+              ? null
+              : () {
+                  _showEditTitleDialog(context, transcription);
+                },
           onDelete: () {
             _showDeleteConfirmationDialog(context, transcription);
           },
-          onCreateFlashcards: () {
-            _generateFlashcards(transcription.id, 'transcription');
-          },
+          onCreateFlashcards: isFailed
+              ? null
+              : () {
+                  _generateFlashcards(transcription.id, 'transcription');
+                },
+          onRetry: isFailed
+              ? () {
+                  context
+                      .read<TranscriptionBloc>()
+                      .add(RetryFailedTranscription(transcription));
+                }
+              : null,
         );
       },
     );
@@ -659,7 +860,7 @@ class _ModeToggle extends StatelessWidget {
           context.read<TranscriptionBloc>().add(ToggleOfflinePreference(isOn));
         },
         title: const Text(
-          'Always use offline mode',
+          'Use offline mode',
           style: TextStyle(
             color: _kWhite,
             fontSize: 16,

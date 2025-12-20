@@ -7,13 +7,13 @@ abstract class TtsRepository {
   /// Convert PDF to audio
   Future<Either<Failure, TtsJob>> convertPdfToAudio({
     required String pdfUrl,
-    String voice = 'en-US-Standard-B',
+    String voice = 'en-US-Neural2-D',
   });
 
   /// Convert text to audio
   Future<Either<Failure, TtsJob>> convertTextToAudio({
     required String text,
-    String voice = 'en-US-Standard-B',
+    String voice = 'en-US-Neural2-D',
   });
 
   /// Get TTS job by ID
@@ -28,4 +28,3 @@ abstract class TtsRepository {
   /// Process all pending queued TTS jobs (internal use by sync service)
   Future<void> processQueuedTtsJobs();
 }
-

@@ -231,9 +231,9 @@ const STUDY_NOTES_JSON_SCHEMA_PROMPT = `Respond ONLY with a single valid JSON ob
 Guidelines:
 - Use ONLY information from the provided transcript. Do NOT fabricate.
 - For short transcripts, keep the summary and lists brief. For long transcripts, write a more detailed, multi-paragraph summary that still stays concise and focused.
-- Key points should capture major ideas and sections. It is fine to have as much items as NEEDED, depending on the transcript length.
-- Action items should be concrete, learner-focused steps. It is fine to have as much items as NEEDED, depending on the transcript length.
-- Study questions should help the learner review, apply, and reflect. It is fine to have as much items as NEEDED, depending on the transcript length.
+- Key points should capture major ideas and sections. It is fine to have as many items as NEEDED, depending on the transcript length.
+- Action items should be concrete, learner-focused steps. It is fine to have as many items as NEEDED, depending on the transcript length.
+- Study questions should help the learner review, apply, and reflect. It is fine to have as many items as NEEDED, depending on the transcript length.
 - Keep individual sentences reasonably short and clear (around 30 words or fewer when possible).`;
 
 export async function generateStudyNotesWithMeta(
