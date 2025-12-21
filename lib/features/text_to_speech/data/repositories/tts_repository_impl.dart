@@ -244,7 +244,7 @@ class TtsRepositoryImpl implements TtsRepository {
 
       // First, recover stuck "processing" items older than 5 minutes
       final allItems = await _queueDataSource.getAllItems();
-      const processingTimeout = Duration(minutes: 5);
+      const processingTimeout = Duration(minutes: 20);
       final now = DateTime.now();
 
       for (final item in allItems) {

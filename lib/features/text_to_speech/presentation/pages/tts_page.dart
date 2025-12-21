@@ -291,7 +291,7 @@ class _TtsPageState extends State<TtsPage> {
                           _selectedSource = value;
                           if (_selectedSource == TtsSource.pdf) {
                             _selectedTranscription = null;
-                          }
+                          } 
                         });
                       },
                       icon: const Icon(

@@ -12,7 +12,7 @@ const Color _kWhite = Colors.white;
 const Color _kLightGray = Color(0xFFCCCCCC);
 const Color _kDarkGray = Color(0xFF888888);
 
-class NotePickerSheet extends StatelessWidget {
+class NotePickerSheet extends StatefulWidget {
   const NotePickerSheet({super.key});
 
   static Future<Transcription?> show(BuildContext context) {
@@ -25,6 +25,25 @@ class NotePickerSheet extends StatelessWidget {
   }
 
   @override
+  State<NotePickerSheet> createState() => _NotePickerSheetState();
+}
+
+class _NotePickerSheetState extends State<NotePickerSheet> {
+  late Future<dynamic> _transcriptionsFuture;
+  @override
+   
+void initState() {
+    super.initState();
+    _loadTranscriptions();
+  }
+
+  void _loadTranscriptions() {
+    final repository = getIt<TranscriptionRepository>();
+    setState(() {
+      _transcriptionsFuture = repository.getAllTranscriptions();
+    });
+  }
+@override
   Widget build(BuildContext context) {
     final repository = getIt<TranscriptionRepository>();
 
@@ -61,7 +80,8 @@ class NotePickerSheet extends StatelessWidget {
           SizedBox(
             height: 320,
             child: FutureBuilder(
-              future: repository.getAllTranscriptions(),
+              
+                future: _transcriptionsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -71,10 +91,7 @@ class NotePickerSheet extends StatelessWidget {
                 if (snapshot.hasError) {
                   return _ErrorState(
                     message: 'Failed to load notes',
-                    onRetry: () {
-                      // Trigger rebuild
-                      (context as Element).markNeedsBuild();
-                    },
+                    onRetry: _loadTranscriptions,
                   );
                 }
 
@@ -82,18 +99,14 @@ class NotePickerSheet extends StatelessWidget {
                 if (result == null) {
                   return _ErrorState(
                     message: 'Unable to load notes',
-                    onRetry: () {
-                      (context as Element).markNeedsBuild();
-                    },
+                    onRetry: _loadTranscriptions,
                   );
                 }
 
                 return result.fold(
                   (failure) => _ErrorState(
                     message: failure.message ?? 'Failed to load notes',
-                    onRetry: () {
-                      (context as Element).markNeedsBuild();
-                    },
+                    onRetry: _loadTranscriptions
                   ),
                   (notes) {
                     if (notes.isEmpty) {
@@ -122,7 +135,6 @@ class NotePickerSheet extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class _EmptyState extends StatelessWidget {
@@ -130,10 +142,10 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: const [
+        children: [
           Icon(Icons.auto_stories_outlined, color: _kDarkGray, size: 40),
           SizedBox(height: 8),
           Text(

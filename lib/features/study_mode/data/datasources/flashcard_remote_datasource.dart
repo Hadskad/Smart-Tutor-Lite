@@ -64,8 +64,10 @@ class FlashcardRemoteDataSourceImpl implements FlashcardRemoteDataSource {
             
             // Generate ID if not provided, using UUID-like format for uniqueness
             final providedId = fc['id'] as String?;
-            final id = providedId?.isNotEmpty == true
-                ? providedId!
+
+            final hasValidProvidedid = providedId != null && providedId.isNotEmpty;
+            final id = hasValidProvidedid
+                ? providedId
                 : '${sourceId}_fc${index}_${front.hashCode}_${back.hashCode}';
             
             return FlashcardModel(
@@ -76,8 +78,8 @@ class FlashcardRemoteDataSourceImpl implements FlashcardRemoteDataSource {
               sourceType: sourceType,
               createdAt: DateTime.now(),
               metadata: {
-                if (providedId != null) 'remoteId': providedId,
-                'generatedId': providedId == null,
+              if (hasValidProvidedid) 'remoteId': providedId,
+                   'generatedId': !hasValidProvidedid,
               },
             );
           })

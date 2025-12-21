@@ -48,7 +48,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
 
   @override
   void dispose() {
-    _studyModeBloc.close();
+    
     super.dispose();
   }
 
@@ -376,9 +376,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => PopScope(
-        canPop: false, // Prevent closing during generation
-        child: AlertDialog(
+      builder: (context) =>  AlertDialog(
           title: const Text('Generating Flashcards'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -400,7 +398,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
             ),
           ],
         ),
-      ),
+      
     );
   }
 

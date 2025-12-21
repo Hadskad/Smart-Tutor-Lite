@@ -144,7 +144,8 @@ class StudyFolderRepositoryImpl implements StudyFolderRepository {
   @override
   Future<Either<Failure, bool>> folderNameExists(String name, {String? excludeId}) async {
     try {
-      final exists = await _localDataSource.folderNameExists(name, excludeId: excludeId);
+      final trimmedName = name.trim();
+    final exists = await _localDataSource.folderNameExists(trimmedName, excludeId: excludeId);
       return Right(exists);
     } on CacheFailure catch (e) {
       return Left(e);

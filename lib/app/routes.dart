@@ -60,6 +60,13 @@ class AppRoutes {
             settings: settings,
           );
         }
+        // Validate types before casting
+        if (args['folderId'] is! String || args['folderName'] is! String) {
+          return MaterialPageRoute(
+            builder: (_) => const _UnknownRoutePage(),
+            settings: settings,
+          );
+        }
         return MaterialPageRoute(
           builder: (_) => StudyFolderDetailPage(
             folderId: args['folderId'] as String,

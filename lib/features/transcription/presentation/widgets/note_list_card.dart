@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
+import 'package:characters/characters.dart';
 import '../../domain/entities/transcription.dart';
 
 const Color _kCardColor = Color(0xFF333333);
@@ -38,8 +38,8 @@ class NoteListCard extends StatelessWidget {
 
     final title = isFailed
         ? 'Failed note generation'
-        : (baseTitle.length > 50
-            ? '${baseTitle.substring(0, 50)}...'
+        : (baseTitle.characters.length > 50
+            ? '${baseTitle.characters.take(50)}...'
             : baseTitle);
 
     final previewText = isFailed ? '' : rawText;

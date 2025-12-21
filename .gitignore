@@ -51,7 +51,7 @@ functions/lib/
 # Node modules
 functions/node_modules/
 
-docs\API_DOCUMENTATION.md
+docs/API_DOCUMENTATION.md
 
 # Temporary files
 allfiles.txt

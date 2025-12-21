@@ -72,6 +72,10 @@ class _FlipCardWidgetState extends State<FlipCardWidget>
   @override
   void didUpdateWidget(FlipCardWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Update duration if changed
+  if (widget.animationDuration != oldWidget.animationDuration) {
+    _controller.duration = widget.animationDuration;
+  }
     // Sync animation with prop changes
     if (widget.isFlipped != oldWidget.isFlipped) {
       if (widget.isFlipped) {

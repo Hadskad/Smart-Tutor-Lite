@@ -30,17 +30,89 @@ class SummaryDetailPage extends StatefulWidget {
 class _SummaryDetailPageState extends State<SummaryDetailPage> {
   late final StudyModeBloc _studyModeBloc;
   bool _isGenerating = false;
+  MaterialBanner? _warningBanner;
+  bool _hasCheckedInitialState = false;
 
   @override
   void initState() {
     super.initState();
     _studyModeBloc = getIt<StudyModeBloc>();
+    // Check if generation already completed or is in progress while user was away
+    _checkBlocState();
+  }
+
+  void _checkBlocState() {
+    if (!mounted) return;
+
+    final currentState = _studyModeBloc.state;
+    if (currentState is StudyModeFlashcardsLoaded) {
+      // Generation completed while user was away - reset generating flag
+      setState(() {
+        _isGenerating = false;
+      });
+    } else if (currentState is StudyModeError) {
+      // Generation failed while user was away - reset generating flag
+      setState(() {
+        _isGenerating = false;
+      });
+    } else if (currentState is StudyModeLoading) {
+      // Generation is still in progress - restore generating state
+      setState(() {
+        _isGenerating = true;
+      });
+    }
+  }
+
+  void _showWarningBanner(BuildContext context) {
+    if (!mounted) return;
+
+    _warningBanner = MaterialBanner(
+      content: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Do not close the app while flashcards are generating',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+      backgroundColor: Colors.orange.shade50,
+      leadingPadding: const EdgeInsets.only(left: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      actions: const [], // No dismiss button - persistent warning
+    );
+
+    ScaffoldMessenger.of(context).showMaterialBanner(_warningBanner!);
+  }
+
+  void _hideWarningBanner(BuildContext context) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+    _warningBanner = null;
+  }
+
+  @override
+  void dispose() {
+    // Note: We don't explicitly dismiss the banner here because context is not
+    // available in dispose(). The ScaffoldMessenger will automatically clean up
+    // the banner when the widget tree is torn down.
+    // Don't close the bloc - it's a singleton shared across the app
+    // Closing it would stop flashcard generation that might be in progress
+    super.dispose();
   }
 
   void _generateFlashcards(BuildContext context) {
+    if (!mounted) return;
+
     setState(() {
       _isGenerating = true;
     });
+
+    _showWarningBanner(context);
 
     _studyModeBloc.add(GenerateFlashcardsEvent(
       sourceId: widget.summary.id,
@@ -52,12 +124,26 @@ class _SummaryDetailPageState extends State<SummaryDetailPage> {
   @override
   Widget build(BuildContext context) {
     final displayTitle = widget.summary.title ?? 'Untitled Summary';
-    
+
+    // Check if we need to show warning banner for ongoing generation (once per page load)
+    if (!_hasCheckedInitialState && _isGenerating) {
+      _hasCheckedInitialState = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _isGenerating) {
+          _showWarningBanner(context);
+        }
+      });
+    }
+
     return BlocProvider.value(
       value: _studyModeBloc,
       child: BlocListener<StudyModeBloc, StudyModeState>(
         listener: (context, state) {
+          // Early return if widget is disposed to prevent crashes
+          if (!mounted) return;
+
           if (state is StudyModeFlashcardsLoaded) {
+            _hideWarningBanner(context);
             setState(() {
               _isGenerating = false;
             });
@@ -86,6 +172,7 @@ class _SummaryDetailPageState extends State<SummaryDetailPage> {
               ),
             );
           } else if (state is StudyModeError) {
+            _hideWarningBanner(context);
             setState(() {
               _isGenerating = false;
             });
@@ -103,6 +190,9 @@ class _SummaryDetailPageState extends State<SummaryDetailPage> {
               ),
             );
           }
+          // Note: We intentionally ignore StudyModeLoading and other states here
+          // because they don't represent the completion of flashcard generation.
+          // The _isGenerating flag is only reset when generation completes (success/error).
         },
         child: Scaffold(
           backgroundColor: _kBackgroundColor,
@@ -189,7 +279,8 @@ class _SummaryDetailPageState extends State<SummaryDetailPage> {
                   )
                 : const Icon(Icons.style_outlined, size: 18),
             label: Text(_isGenerating ? 'Generating...' : 'Create Flashcards'),
-            onPressed: _isGenerating ? null : () => _generateFlashcards(context),
+            onPressed:
+                _isGenerating ? null : () => _generateFlashcards(context),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 12),
               backgroundColor: _kAccentBlue,
@@ -203,4 +294,3 @@ class _SummaryDetailPageState extends State<SummaryDetailPage> {
     );
   }
 }
-

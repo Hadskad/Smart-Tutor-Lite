@@ -69,17 +69,17 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
         numFlashcards: event.numFlashcards,
       );
 
-      await result.fold(
-        (failure) async {
-          emit(StudyModeError(failure.message ?? 'Failed to generate flashcards'));
-        },
-        (flashcards) async {
-          // Repository already handles duplicates, just emit the result
-          emit(StudyModeFlashcardsLoaded(
-            flashcards: List.unmodifiable(flashcards),
-          ));
-        },
-      );
+      result.fold(
+      (failure) {
+        emit(StudyModeError(failure.message ?? 'Failed to generate flashcards'));
+      },
+      (flashcards) {
+        // Repository already handles duplicates, just emit the result
+        emit(StudyModeFlashcardsLoaded(
+          flashcards: List.unmodifiable(flashcards),
+        ));
+      },
+    );
     } finally {
       _isGeneratingFlashcards = false;
       await _logMetrics(segmentId);

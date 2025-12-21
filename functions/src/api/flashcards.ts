@@ -23,7 +23,7 @@ app.post('/', async (req: Request, res: Response) => {
         message: 'Flashcard generation took too long. Please try again with shorter content.',
       });
     }
-  }, 60000); // 60 seconds
+  }, 300000); // 5 minutes
 
   try {
     const { sourceId, sourceType, numFlashcards = 10 } = req.body;

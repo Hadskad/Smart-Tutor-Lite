@@ -316,7 +316,9 @@ class TtsBloc extends Bloc<TtsEvent, TtsState> {
     try {
       await _repository.processQueuedTtsJobs();
       // Reload jobs to show newly processed ones
-      add(const LoadTtsJobsEvent());
+      if (!_isClosed) {
+        add(const LoadTtsJobsEvent());
+      }
     } catch (error) {
       if (!_isClosed) {
         emit(

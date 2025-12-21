@@ -573,22 +573,25 @@ function redactPII(text: string): { text: string; redacted: boolean } {
   // Emails
   const emailRegex =
     /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-  if (emailRegex.test(result)) {
-    result = result.replace(emailRegex, '[REDACTED_EMAIL]');
+  const beforeEmail = result;
+  result = result.replace(emailRegex, '[REDACTED_EMAIL]');
+  if (result !== beforeEmail) {
     redacted = true;
   }
 
   // Phone numbers (very loose)
   const phoneRegex = /\+?\d{7,15}/g;
-  if (phoneRegex.test(result)) {
-    result = result.replace(phoneRegex, '[REDACTED_PHONE]');
+  const beforePhone = result;
+  result = result.replace(phoneRegex, '[REDACTED_PHONE]');
+  if (result !== beforePhone) {
     redacted = true;
   }
 
   // Simple removal of <system>, <user>, <assistant> style tags
   const tagRegex = /<\/?(system|user|assistant)[^>]*>/gi;
-  if (tagRegex.test(result)) {
-    result = result.replace(tagRegex, '');
+  const beforeTag = result;
+  result = result.replace(tagRegex, '');
+  if (result !== beforeTag) {
     redacted = true;
   }
 

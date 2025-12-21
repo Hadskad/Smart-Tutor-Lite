@@ -176,6 +176,7 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
     UpdateSummaryEvent event,
     Emitter<SummaryState> emit,
   ) async {
+    emit(SummaryLoading(summaries: List.unmodifiable(_summaries)));
     final result = await _repository.updateSummary(event.summary);
 
     result.fold(
@@ -189,7 +190,9 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
         final index = _summaries.indexWhere((s) => s.id == updatedSummary.id);
         if (index != -1) {
           _summaries[index] = updatedSummary;
-        }
+        } else {
+      _summaries.insert(0, updatedSummary);
+       }
         emit(SummaryInitial(summaries: List.unmodifiable(_summaries)));
       },
     );

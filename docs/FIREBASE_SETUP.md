@@ -233,7 +233,7 @@ firebase functions:log
    - Restart emulator after setting config
 
 4. **Deployment failures**
-   - Check Node.js version (>=18.0.0)
+   - Check Node.js version (>=20.0.0)
    - Verify TypeScript compilation: `npm run build`
    - Check Firebase CLI version: `firebase --version`
 
@@ -253,7 +253,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2
         with:
-          node-version: '18'
+          node-version: '20'
       - run: npm install -g firebase-tools
       - run: cd functions && npm install
       - run: firebase deploy --only functions --token ${{ secrets.FIREBASE_TOKEN }}

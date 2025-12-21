@@ -143,7 +143,21 @@ class _FlashcardsListState extends State<_FlashcardsList> {
     _loadSourceTitles();
   }
 
+  @override
+  void didUpdateWidget(covariant _FlashcardsList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.flashcards != oldWidget.flashcards) {
+      _loadSourceTitles();
+    }
+  }
+
   Future<void> _loadSourceTitles() async {
+     if (mounted) {
+      setState(() {
+        _isLoadingTitles = true;
+      });
+    }
+
     final transcriptionRepo = getIt<TranscriptionRepository>();
     final summaryRepo = getIt<SummaryRepository>();
 
@@ -606,6 +620,7 @@ class _FlashcardsListState extends State<_FlashcardsList> {
   ) async {
     final bloc = context.read<StudyModeBloc>();
     final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
 
     // Show loading indicator
     messenger.showSnackBar(
@@ -691,7 +706,7 @@ class _FlashcardsListState extends State<_FlashcardsList> {
         messenger.showSnackBar(
           SnackBar(
             content: Text(errorMessage ?? 'Error deleting flashcards'),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            backgroundColor: errorColor,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -705,15 +720,18 @@ class _FlashcardsListState extends State<_FlashcardsList> {
         );
       }
     } catch (e) {
-      subscription.cancel();
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
         SnackBar(
           content: Text('Error deleting flashcards: ${e.toString()}'),
-          backgroundColor: Theme.of(context).colorScheme.error,
+          backgroundColor: errorColor,
           behavior: SnackBarBehavior.floating,
         ),
       );
+    } finally {
+      // Ensure cleanup happens in all code paths
+      debounceTimer?.cancel();
+      subscription.cancel();
     }
   }
 }

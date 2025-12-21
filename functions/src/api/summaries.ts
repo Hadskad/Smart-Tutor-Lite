@@ -48,7 +48,7 @@ app.post('/', async (req: Request, res: Response) => {
     }
 
     // Determine if this is a PDF summary
-    const isPdf = !!pdfUrl || sourceType === 'pdf';
+    const isPdf = (pdfUrl && !text) || sourceType === 'pdf';
     
     // Generate summary using Gemini
     const summaryText = await summarizeText({
