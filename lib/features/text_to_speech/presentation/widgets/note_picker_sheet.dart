@@ -45,7 +45,7 @@ void initState() {
   }
 @override
   Widget build(BuildContext context) {
-    final repository = getIt<TranscriptionRepository>();
+   
 
     return Container(
       decoration: const BoxDecoration(

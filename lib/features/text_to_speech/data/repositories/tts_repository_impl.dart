@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dartz/dartz.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:injectable/injectable.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/errors/failures.dart';
@@ -37,6 +41,7 @@ class TtsRepositoryImpl implements TtsRepository {
 
   // Track items currently being processed to prevent race conditions
   final Set<String> _processingItemIds = {};
+  final Dio _dio = Dio();
 
   Future<Box<Map>> _openCacheBox() async {
     if (_hive.isBoxOpen(_ttsJobCacheBox)) {
@@ -242,20 +247,20 @@ class TtsRepositoryImpl implements TtsRepository {
         return; // Not online, skip processing
       }
 
-      // First, recover stuck "processing" items older than 5 minutes
+      // Recover stuck "processing" items
+      // For async batch processing, very large jobs can take hours
+      // Use 24-hour timeout to allow legitimate long-running batch jobs to complete
       final allItems = await _queueDataSource.getAllItems();
-      const processingTimeout = Duration(minutes: 20);
+      const recoveryTimeout = Duration(hours: 24); // 24 hours for very large batch jobs
       final now = DateTime.now();
 
       for (final item in allItems) {
         if (item.status == 'processing' && item.updatedAt != null) {
           final timeSinceUpdate = now.difference(item.updatedAt!);
-          if (timeSinceUpdate > processingTimeout) {
-            // Skip if currently being processed (not truly stuck)
-            if (_processingItemIds.contains(item.id)) {
-              continue;
-            }
-            // Reset stuck processing item back to pending for retry
+          if (timeSinceUpdate > recoveryTimeout) {
+            // After app restart, _processingItemIds is always empty,
+            // so we reset all items that exceed the timeout
+            // The recoveryTimeout ensures we don't reset legitimately processing items
             await _queueDataSource.markAsPending(item.id);
           }
         }
@@ -263,7 +268,8 @@ class TtsRepositoryImpl implements TtsRepository {
 
       final pendingItems = await _queueDataSource.getPendingItems();
       const maxRetries = 3;
-      const requestTimeout = Duration(minutes: 10);
+      // No request timeout - async batch jobs are handled by backend
+      // The backend submits the job and returns immediately, then polls for completion
 
       for (final item in pendingItems) {
         // Skip items that have exceeded max retries (should already be filtered, but double-check)
@@ -271,13 +277,10 @@ class TtsRepositoryImpl implements TtsRepository {
           continue;
         }
 
-        // Skip items currently being processed (race condition protection)
-        if (_processingItemIds.contains(item.id)) {
-          continue;
-        }
-
-        // Lock item for processing
-        _processingItemIds.add(item.id);
+        // Atomically lock item for processing (skip if already processing)
+       if (!_processingItemIds.add(item.id)) {
+         continue; // Item already being processed
+      }
 
         try {
           // Mark as processing
@@ -285,32 +288,18 @@ class TtsRepositoryImpl implements TtsRepository {
 
           TtsJobModel result;
           if (item.sourceType == 'text' && item.text != null) {
-            result = await _remoteDataSource
-                .convertTextToAudio(
+            // For async batch processing, the backend submits the job and returns immediately
+            // No timeout needed - job submission is fast, processing happens asynchronously
+            result = await _remoteDataSource.convertTextToAudio(
               text: item.text!,
               voice: item.voice,
-            )
-                .timeout(
-              requestTimeout,
-              onTimeout: () {
-                throw TimeoutException(
-                  'Request timeout after ${requestTimeout.inMinutes} minutes',
-                );
-              },
             );
           } else if (item.sourceType == 'pdf' && item.pdfUrl != null) {
-            result = await _remoteDataSource
-                .convertPdfToAudio(
+            // For async batch processing, the backend submits the job and returns immediately
+            // No timeout needed - job submission is fast, processing happens asynchronously
+            result = await _remoteDataSource.convertPdfToAudio(
               pdfUrl: item.pdfUrl!,
               voice: item.voice,
-            )
-                .timeout(
-              requestTimeout,
-              onTimeout: () {
-                throw TimeoutException(
-                  'Request timeout after ${requestTimeout.inMinutes} minutes',
-                );
-              },
             );
           } else {
             await _queueDataSource.markAsFailed(
@@ -320,17 +309,23 @@ class TtsRepositoryImpl implements TtsRepository {
             continue;
           }
 
-          // Cache the result
+          // Cache the job metadata (includes audioUrl when job completes)
           await _cacheTtsJob(result);
+
+          // If job is completed and has audio URL, download audio for offline access
+          if (result.status == 'completed' && result.audioUrl.isNotEmpty) {
+            try {
+              await _downloadAudioToLocalCache(result);
+            } catch (error) {
+              // Don't fail the job if download fails - metadata is already cached
+              // Audio can still be accessed via URL when online
+              // Log error for monitoring
+              debugPrint('Failed to download audio for job ${result.id}: $error');
+            }
+          }
 
           // Mark as completed (removes from queue)
           await _queueDataSource.markAsCompleted(item.id);
-        } on TimeoutException catch (error) {
-          // Mark as failed due to timeout, will retry later
-          await _queueDataSource.markAsFailed(
-            item.id,
-            error.toString(),
-          );
         } catch (error) {
           // Mark as failed, will retry later
           await _queueDataSource.markAsFailed(
@@ -345,6 +340,47 @@ class TtsRepositoryImpl implements TtsRepository {
     } catch (error) {
       // Log error but don't throw - queue processing should be resilient
       // In production, you might want to log this to a monitoring service
+    }
+  }
+
+  /// Download audio file from Firebase Storage URL to local cache
+  /// Stores audio in app's documents directory for offline access
+  Future<void> _downloadAudioToLocalCache(TtsJobModel job) async {
+    if (job.audioUrl.isEmpty) {
+      return; // No audio URL to download
+    }
+
+    try {
+      // Get app's documents directory
+      final appDir = await getApplicationDocumentsDirectory();
+      final audioDir = Directory('${appDir.path}/tts_audio_cache');
+      if (!await audioDir.exists()) {
+        await audioDir.create(recursive: true);
+      }
+
+      // Download audio file
+      final audioPath = '${audioDir.path}/${job.id}.mp3';
+      final response = await _dio.download(
+        job.audioUrl,
+        audioPath,
+        options: Options(
+          receiveTimeout: const Duration(minutes: 10), // 10 min timeout for download
+          followRedirects: true,
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        // Update job model with local path (optional - audioUrl already works)
+        // The local path can be used for offline playback
+        // Note: This requires updating the model to store localPath if needed
+        // For now, we just cache the file locally, the audioUrl in metadata is sufficient
+        debugPrint('Audio downloaded successfully for job ${job.id} to $audioPath');
+      }
+    } catch (error) {
+      // Download failed - don't throw, just log
+      // The audioUrl in cached metadata can still be used when online
+      debugPrint('Failed to download audio for job ${job.id}: $error');
+      rethrow; // Re-throw so caller can handle gracefully
     }
   }
 }

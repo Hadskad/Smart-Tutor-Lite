@@ -190,9 +190,7 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
         final index = _summaries.indexWhere((s) => s.id == updatedSummary.id);
         if (index != -1) {
           _summaries[index] = updatedSummary;
-        } else {
-      _summaries.insert(0, updatedSummary);
-       }
+        } 
         emit(SummaryInitial(summaries: List.unmodifiable(_summaries)));
       },
     );

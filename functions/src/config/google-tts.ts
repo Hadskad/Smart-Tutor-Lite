@@ -1,7 +1,43 @@
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
+import { storage } from './firebase-admin';
 
 // Google Cloud TTS Configuration
 export const DEFAULT_VOICE_NAME = 'en-US-Neural2-D';
+
+/**
+ * Get Google Cloud Project Number
+ * Required for synthesizeLongAudio API endpoint
+ * Must be set via environment variable GCP_PROJECT_NUMBER
+ * 
+ * Project number can be found at:
+ * https://console.cloud.google.com/iam-admin/settings
+ * 
+ * @returns Project number as string
+ */
+export function getGCPProjectNumber(): string {
+  const projectNumber = process.env.GCP_PROJECT_NUMBER;
+  
+  if (!projectNumber) {
+    throw new Error(
+      'GCP_PROJECT_NUMBER environment variable is required for synthesizeLongAudio API. ' +
+      'Get it from: https://console.cloud.google.com/iam-admin/settings. ' +
+      'Set it as a Firebase secret: firebase functions:secrets:set GCP_PROJECT_NUMBER',
+    );
+  }
+
+  return projectNumber;
+}
+
+/**
+ * Get GCS bucket name for TTS operations
+ * Uses the default Firebase Storage bucket
+ * 
+ * @returns Bucket name as string
+ */
+export function getGCSBucketNameForTTS(): string {
+  const bucket = storage.bucket();
+  return bucket.name;
+}
 
 // Voice ID type - string to support voice names like 'en-US-Neural2-D'
 export type VoiceId = string;

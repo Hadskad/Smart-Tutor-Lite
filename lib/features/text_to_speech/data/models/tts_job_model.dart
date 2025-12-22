@@ -10,6 +10,8 @@ class TtsJobModel extends TtsJob {
     required super.createdAt,
     super.voice,
     super.errorMessage,
+    super.operationName,
+    super.storagePath,
   });
 
   factory TtsJobModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,8 @@ class TtsJobModel extends TtsJob {
           DateTime.now(),
       voice: json['voice'] as String?,
       errorMessage: json['errorMessage'] as String?,
+      operationName: json['operationName'] as String?,
+      storagePath: json['storagePath'] as String?,
     );
   }
 
@@ -36,6 +40,8 @@ class TtsJobModel extends TtsJob {
       'createdAt': createdAt.toIso8601String(),
       if (voice != null) 'voice': voice,
       if (errorMessage != null) 'errorMessage': errorMessage,
+      if (operationName != null) 'operationName': operationName,
+      if (storagePath != null) 'storagePath': storagePath,
     };
   }
 
@@ -48,6 +54,8 @@ class TtsJobModel extends TtsJob {
     DateTime? createdAt,
     String? voice,
     String? errorMessage,
+    String? operationName,
+    String? storagePath,
   }) {
     return TtsJobModel(
       id: id ?? this.id,
@@ -58,6 +66,8 @@ class TtsJobModel extends TtsJob {
       createdAt: createdAt ?? this.createdAt,
       voice: voice ?? this.voice,
       errorMessage: errorMessage ?? this.errorMessage,
+      operationName: operationName ?? this.operationName,
+      storagePath: storagePath ?? this.storagePath,
     );
   }
 
@@ -71,6 +81,8 @@ class TtsJobModel extends TtsJob {
       createdAt: entity.createdAt,
       voice: entity.voice,
       errorMessage: entity.errorMessage,
+      operationName: entity.operationName,
+      storagePath: entity.storagePath,
     );
   }
 
@@ -84,6 +96,8 @@ class TtsJobModel extends TtsJob {
       createdAt: createdAt,
       voice: voice,
       errorMessage: errorMessage,
+      operationName: operationName,
+      storagePath: storagePath,
     );
   }
 }

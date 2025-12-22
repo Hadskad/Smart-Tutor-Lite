@@ -11,6 +11,8 @@ class TtsJob extends Equatable {
     required this.createdAt,
     this.voice,
     this.errorMessage,
+    this.operationName,
+    this.storagePath,
   });
 
   final String id;
@@ -21,6 +23,8 @@ class TtsJob extends Equatable {
   final DateTime createdAt;
   final String? voice; // Voice name (e.g., 'en-US-Neural2-D')
   final String? errorMessage; // Error message if status is 'failed'
+  final String? operationName; // Google Cloud Operation name for tracking long-running operations
+  final String? storagePath; // Firebase Storage path for audio file
 
   @override
   List<Object?> get props => [
@@ -32,5 +36,7 @@ class TtsJob extends Equatable {
         createdAt,
         voice,
         errorMessage,
+        operationName,
+        storagePath,
       ];
 }

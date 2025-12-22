@@ -21,6 +21,7 @@ export interface GenerateQuizOptions {
 export interface GenerateFlashcardsOptions {
   content: string;
   numFlashcards: number;
+  signal?: AbortSignal;
 }
 
 export interface StudyNote {
@@ -177,7 +178,12 @@ ${content}`;
 export async function generateFlashcards(
   options: GenerateFlashcardsOptions
 ): Promise<Array<{ front: string; back: string }>> {
-  const { content, numFlashcards } = options;
+  const { content, numFlashcards, signal } = options;
+
+  // Check if already aborted before starting
+  if (signal?.aborted) {
+    throw new Error('Operation aborted');
+  }
 
   const systemPrompt = `You are an expert educational assistant specialized in creating effective flashcards for active recall and spaced repetition learning. Follow these principles:
 
@@ -204,7 +210,8 @@ ${content}`;
 
   const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
   
-  const result = await model.generateContent({
+  // Wrap the generateContent call to handle abort signals
+  const generatePromise = model.generateContent({
     contents: [
       {
         role: 'user',
@@ -217,6 +224,40 @@ ${content}`;
       temperature: 0.4,
     },
   });
+
+  // If signal is provided, set up abort handling
+  if (signal) {
+    try {
+      const result = await Promise.race([
+        generatePromise,
+        new Promise<never>((_, reject) => {
+          if (signal.aborted) {
+            reject(new Error('Operation aborted'));
+          } else {
+            signal.addEventListener('abort', () => {
+              reject(new Error('Operation aborted'));
+            }, { once: true });
+          }
+        }),
+      ]);
+      return processFlashcardResult(result, content, numFlashcards);
+    } catch (error) {
+      if (signal.aborted || (error instanceof Error && error.message === 'Operation aborted')) {
+        throw new Error('Operation aborted');
+      }
+      throw error;
+    }
+  }
+
+  const result = await generatePromise;
+  return processFlashcardResult(result, content, numFlashcards);
+}
+
+function processFlashcardResult(
+  result: any,
+  content: string,
+  numFlashcards: number
+): Array<{ front: string; back: string }> {
 
   const contentText = result.response.text();
   if (!contentText || !contentText.trim()) {
