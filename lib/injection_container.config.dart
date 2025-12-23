@@ -21,6 +21,7 @@ import 'package:logger/logger.dart' as _i974;
 import 'package:shared_preferences/shared_preferences.dart' as _i460;
 import 'package:smart_tutor_lite/core/network/api_client.dart' as _i114;
 import 'package:smart_tutor_lite/core/network/network_info.dart' as _i440;
+import 'package:smart_tutor_lite/core/services/audio_converter.dart' as _i715;
 import 'package:smart_tutor_lite/core/sync/queue_sync_service.dart' as _i545;
 import 'package:smart_tutor_lite/core/utils/logger.dart' as _i496;
 import 'package:smart_tutor_lite/core/utils/performance_monitor.dart' as _i366;
@@ -156,6 +157,7 @@ extension GetItInjectableX on _i174.GetIt {
       () => externalModule.sharedPreferences(),
       preResolve: true,
     );
+    gh.lazySingleton<_i715.AudioConverter>(() => _i715.AudioConverter());
     gh.lazySingleton<_i895.Connectivity>(() => externalModule.connectivity);
     gh.lazySingleton<_i974.Logger>(() => externalModule.logger());
     gh.lazySingleton<_i117.Battery>(() => externalModule.battery());
@@ -191,14 +193,17 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i588.TranscriptionPreferencesRepository>(() =>
         _i671.TranscriptionPreferencesRepositoryImpl(
             gh<_i287.TranscriptionPreferencesLocalDataSource>()));
+    gh.lazySingleton<_i820.WhisperLocalDataSource>(
+        () => _i820.WhisperLocalDataSourceImpl(
+              gh<_i687.WhisperFfi>(),
+              gh<_i715.AudioConverter>(),
+            ));
     gh.lazySingleton<_i368.StudyFolderLocalDataSource>(
         () => _i368.StudyFolderLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i38.SummaryQueueLocalDataSource>(
         () => _i38.SummaryQueueLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i756.WhisperLifecycleObserver>(
         () => _i756.WhisperLifecycleObserver(gh<_i687.WhisperFfi>()));
-    gh.lazySingleton<_i820.WhisperLocalDataSource>(
-        () => _i820.WhisperLocalDataSourceImpl(gh<_i687.WhisperFfi>()));
     gh.lazySingleton<_i459.StudyFolderRepository>(() =>
         _i15.StudyFolderRepositoryImpl(gh<_i368.StudyFolderLocalDataSource>()));
     gh.lazySingleton<_i361.Dio>(
@@ -274,7 +279,7 @@ extension GetItInjectableX on _i174.GetIt {
           gh<_i90.TtsRepository>(),
           gh<_i496.AppLogger>(),
         ));
-    gh.factory<_i940.TranscriptionBloc>(() => _i940.TranscriptionBloc(
+    gh.lazySingleton<_i940.TranscriptionBloc>(() => _i940.TranscriptionBloc(
           gh<_i978.TranscribeAudio>(),
           gh<_i99.PerformanceBridge>(),
           gh<_i861.TranscriptionRepository>(),

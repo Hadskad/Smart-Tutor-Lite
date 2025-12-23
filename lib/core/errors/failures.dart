@@ -37,3 +37,7 @@ class WhisperRuntimeFailure extends Failure {
 class WhisperNoSpeechFailure extends Failure {
   const WhisperNoSpeechFailure({super.message, super.cause});
 }
+
+class AudioConversionFailure extends Failure {
+  const AudioConversionFailure({super.message, super.cause});
+}

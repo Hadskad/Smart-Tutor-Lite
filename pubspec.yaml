@@ -43,6 +43,7 @@ dependencies:
   # Audio
   record: ^6.1.2
   audioplayers: ^5.2.1
+  # ffmpeg_kit_flutter_audio: ^6.0.3  # Disabled - package discontinued, Maven artifacts unavailable
   
   # PDF handling
   syncfusion_flutter_pdf: ^31.2.15
@@ -51,6 +52,7 @@ dependencies:
   cupertino_icons: ^1.0.6
   flutter_spinkit: ^5.2.0
   lottie: ^3.0.0
+  flutter_markdown: ^0.7.3
   
   # Utils
   intl: ^0.20.2

@@ -63,13 +63,22 @@ class TranscriptionRepositoryImpl implements TranscriptionRepository {
         audioPath,
         modelAssetPath: modelAssetPath,
       );
+
+      // Handle empty transcription text
+      final isNoSpeechDetected = rawText.trim().isEmpty;
+      final displayText =
+          isNoSpeechDetected ? '[No speech detected]' : rawText;
+
       final model = TranscriptionModel(
         id: _uuid.v4(),
-        text: rawText,
+        text: displayText,
         audioPath: audioPath,
         duration: Duration.zero,
         timestamp: DateTime.now(),
-        confidence: 0.95,
+        confidence: isNoSpeechDetected ? 0.0 : 0.95,
+        metadata: {
+          'no_speech_detected': isNoSpeechDetected,
+        },
       );
       await _cacheTranscription(model);
       return Right(model.toEntity());

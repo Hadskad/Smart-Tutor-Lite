@@ -107,6 +107,16 @@ class TranscriptionRecording extends TranscriptionState {
       ];
 }
 
+class TranscriptionStopping extends TranscriptionState {
+  const TranscriptionStopping({
+    super.history = const [],
+    super.preferences = const TranscriptionPreferences(),
+    super.queueLength = 0,
+    super.queue = const [],
+    super.formattingTranscriptionId,
+  });
+}
+
 class TranscriptionProcessing extends TranscriptionState {
   const TranscriptionProcessing({
     required this.audioPath,

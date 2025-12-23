@@ -22,6 +22,7 @@ class AudioRecorderWidget extends StatelessWidget {
     return BlocBuilder<TranscriptionBloc, TranscriptionState>(
       builder: (context, state) {
         final isRecording = state is TranscriptionRecording;
+        final isStopping = state is TranscriptionStopping;
         final startedAt = isRecording ? state.startedAt : null;
         final approxSizeBytes = isRecording ? state.estimatedSizeBytes : null;
         final isInputTooLow = isRecording ? state.isInputTooLow : false;
@@ -35,7 +36,7 @@ class AudioRecorderWidget extends StatelessWidget {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _Waveform(isActive: isRecording),
+            _Waveform(isActive: isRecording && !isStopping),
             const SizedBox(height: 20),
             _RecordingTimer(startedAt: startedAt),
             if (isRecording && approxSizeBytes != null) ...[
@@ -69,7 +70,7 @@ class AudioRecorderWidget extends StatelessWidget {
                   disabledBackgroundColor: _kDarkGray.withOpacity(0.5),
                   disabledForegroundColor: _kLightGray,
                 ),
-                onPressed: (state is TranscriptionProcessing && isRecording) || !canStartRecording
+                onPressed: isStopping || (state is TranscriptionProcessing && isRecording) || !canStartRecording
                     ? null
                     : () {
                         final bloc = context.read<TranscriptionBloc>();
@@ -79,7 +80,7 @@ class AudioRecorderWidget extends StatelessWidget {
                               : const StartRecording(),
                         );
                       },
-                icon: (state is TranscriptionProcessing && isRecording)
+                icon: isStopping || (state is TranscriptionProcessing && isRecording)
                     ? SizedBox(
                         width: 20,
                         height: 20,
@@ -91,7 +92,7 @@ class AudioRecorderWidget extends StatelessWidget {
                     : Icon(
                         isRecording ? Icons.stop_rounded : Icons.mic_rounded),
                 label: Text(
-                  (state is TranscriptionProcessing && isRecording)
+                  isStopping || (state is TranscriptionProcessing && isRecording)
                       ? 'Stopping...'
                       : (!canStartRecording
                           ? 'Queue Full ($queueLength/$maxQueueSize)'

@@ -222,19 +222,42 @@ export async function generateStudyNotes(content: string): Promise<StudyNote> {
 const STUDY_NOTES_JSON_SCHEMA_PROMPT = `Respond ONLY with a single valid JSON object EXACTLY matching this schema (no surrounding text):
 {
   "title": "a short descriptive title based on the transcript content",
-  "summary": "a multi-paragraph overview that scales with transcript length",
+  "summary": "a comprehensive, richly formatted overview using Markdown syntax",
   "key_points": ["concise bullets capturing main ideas and sections"],
   "action_items": ["practical steps or concrete recommendations"],
   "study_questions": ["thoughtful questions for reflection or comprehension"]
 }
 
-Guidelines:
+CONTENT FILTERING Guidelines:
+- Filter out casual greetings (e.g., "Good morning", "Hi everyone"), filler words, and off-topic conversation
+- Focus ONLY on educational content, concepts, facts, and explanations
+- Remove any non-instructional social interactions or small talk
+- Extract only the valuable educational information from the transcript
+
+EXPLANATION STYLE - For each major concept, follow this three-tier structure:
+1. **Simple Explanation First**: Start with a very basic, layman's explanation (as if explaining to someone with no background)
+2. **Academic Explanation**: Follow with the proper technical/academic definition and explanation
+3. **Examples & Details**: End with concrete examples, formulas, equations, or practical applications
+
+FORMATTING Guidelines for the summary field:
+- Use **bold** for key terms, important concepts, and section headings
+- Use *italics* for emphasis and definitions
+- Use \`code\` formatting for technical terms, formulas, or specific notation
+- Structure content with clear hierarchies using markdown headers (###, ####)
+- Use bullet points and numbered lists for clarity
+- Include formulas and equations where relevant
+- Make it visually scannable and student-friendly
+
+CONTENT QUALITY:
 - Use ONLY information from the provided transcript. Do NOT fabricate.
-- For short transcripts, keep the summary and lists brief. For long transcripts, write a more detailed, multi-paragraph summary that still stays concise and focused.
-- Key points should capture major ideas and sections. It is fine to have as many items as NEEDED, depending on the transcript length.
-- Action items should be concrete, learner-focused steps. It is fine to have as many items as NEEDED, depending on the transcript length.
-- Study questions should help the learner review, apply, and reflect. It is fine to have as many items as NEEDED, depending on the transcript length.
-- Keep individual sentences reasonably short and clear (around 30 words or fewer when possible).`;
+- Include ALL important information from the transcript - no key concepts should be omitted
+- Add helpful context, clarifications, or brief explanations that enhance understanding WITHOUT adding false information
+- Explain WHY concepts matter, not just WHAT they are
+- For short transcripts, keep concise. For long transcripts, write detailed multi-paragraph summaries
+- Key points should capture major ideas and sections. It is fine to have as many items as NEEDED, depending on the transcript length
+- Action items should be concrete, learner-focused steps. It is fine to have as many items as NEEDED, depending on the transcript length
+- Study questions should help the learner review, apply, and reflect. It is fine to have as many items as NEEDED, depending on the transcript length
+- Keep individual sentences reasonably short and clear (around 30 words or fewer when possible)`;
 
 export async function generateStudyNotesWithMeta(
   content: string,
@@ -269,11 +292,27 @@ export async function generateStudyNotesWithMeta(
     messages: [
       {
         role: 'system',
-        content: `You create accurate, student-friendly study notes strictly from the provided transcript.\n\n${STUDY_NOTES_JSON_SCHEMA_PROMPT}`,
+        content: `You are an expert educational content processor specialized in converting lecture transcripts into exceptional study notes.
+
+Your role:
+1. FILTER the transcript to extract only valuable educational content (remove greetings, filler words, casual talk)
+2. EXPLAIN concepts using a progressive three-tier approach (simple → academic → examples/formulas)
+3. FORMAT notes beautifully using rich Markdown for maximum clarity and learning experience
+4. ENHANCE understanding by adding helpful context and explanations while staying true to the source material
+
+${STUDY_NOTES_JSON_SCHEMA_PROMPT}`,
       },
       {
         role: 'user',
-        content: `Generate structured study notes strictly from the transcript below. Use only the transcript information. 
+        content: `Transform the following lecture transcript into beautifully formatted, comprehensive study notes.
+
+IMPORTANT:
+- Remove casual greetings, filler words, and off-topic conversation - extract ONLY educational content
+- For each concept: start with simple explanation → then academic explanation → then examples/formulas/definitions
+- Use rich Markdown formatting (bold for key terms, italics for emphasis, headers for structure, lists for clarity)
+- Include ALL important information while adding helpful clarifications where needed
+- Make it the absolute best learning resource for students
+
 Output must be valid JSON matching the schema.
 
 Transcript:

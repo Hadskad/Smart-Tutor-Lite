@@ -160,13 +160,14 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       final result = await _transcriptionRepository.getAllTranscriptions();
       result.fold(
         (failure) => emit(
-        TranscriptionError(
-          message: failure.message ?? 'Failed to load transcriptions from storage. Please check your connection and try again.',
-          history: List.unmodifiable(_history),
-          preferences: _preferences,
-          queueLength: state.queue.length,
-          queue: state.queue,
-        ),
+          TranscriptionError(
+            message: failure.message ??
+                'Failed to load transcriptions from storage. Please check your connection and try again.',
+            history: List.unmodifiable(_history),
+            preferences: _preferences,
+            queueLength: state.queue.length,
+            queue: state.queue,
+          ),
         ),
         (transcriptions) {
           _history
@@ -185,7 +186,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     } catch (error) {
       emit(
         TranscriptionError(
-          message: 'Failed to load transcriptions: ${error.toString()}. Please try again.',
+          message:
+              'Failed to load transcriptions: ${error.toString()}. Please try again.',
           history: List.unmodifiable(_history),
           preferences: _preferences,
           queueLength: state.queue.length,
@@ -239,7 +241,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
   ) async {
     try {
       final savedQueue = await _queueLocalDataSource.loadQueue();
-      
+
       // Validate and filter queue: check file existence and mark missing files as failed
       final validatedQueue = <QueuedTranscriptionJob>[];
       for (final job in savedQueue) {
@@ -247,7 +249,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         if (job.status == QueuedTranscriptionJobStatus.success) {
           continue;
         }
-        
+
         // Check if file exists
         final file = File(job.audioPath);
         if (await file.exists()) {
@@ -273,13 +275,13 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           );
         }
       }
-      
+
       // Update state with loaded queue
       if (validatedQueue.isNotEmpty) {
         _emitStateWithUpdatedQueue(emit, validatedQueue);
         // Save validated queue back
         await _queueLocalDataSource.saveQueue(validatedQueue);
-        
+
         // Try to process next job if queue has waiting jobs
         await _processNextQueuedJob(emit);
       }
@@ -375,6 +377,15 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           queue: current.queue,
         ),
       );
+    } else if (current is TranscriptionStopping) {
+      emit(
+        TranscriptionStopping(
+          history: current.history,
+          preferences: _preferences,
+          queueLength: queueLen,
+          queue: current.queue,
+        ),
+      );
     } else if (current is TranscriptionProcessing) {
       emit(
         TranscriptionProcessing(
@@ -451,6 +462,13 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       debugPrint(
           '[SpeedTest] Using measured speed: ${_lastMeasuredSpeedKbps!.toStringAsFixed(2)} kbps (strong: $isStrong)');
       return isStrong;
+    }
+    // If minStrongSpeedKbps is 0, any connection is considered strong
+    // (user wants online mode regardless of speed)
+    if (AppConstants.minStrongSpeedKbps == 0) {
+      debugPrint(
+          '[SpeedTest] No speed data, but minStrongSpeedKbps=0: treating any connection as strong');
+      return true;
     }
     // Fallback to connection type if speed hasn't been measured yet or is expired
     final fallbackReason = _lastMeasuredSpeedKbps == null
@@ -695,17 +713,28 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       return;
     }
 
+    // Emit stopping state immediately to show loading indicator
+    emit(
+      TranscriptionStopping(
+        history: List.unmodifiable(_history),
+        preferences: _preferences,
+        queueLength: state.queue.length,
+        queue: state.queue,
+      ),
+    );
+
     try {
       final path = await _recorder.stop();
       final audioPath = path ?? _currentRecordingPath;
       if (audioPath == null || !File(audioPath).existsSync()) {
         emit(
           TranscriptionError(
-            message: 'Recording file was not created or is missing. The audio may not have been saved properly. Please try recording again.',
+            message:
+                'Recording file was not created or is missing. The audio may not have been saved properly. Please try recording again.',
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
-          queue: state.queue,
+            queue: state.queue,
           ),
         );
         return;
@@ -728,7 +757,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
-          queue: state.queue,
+            queue: state.queue,
           ),
         );
         return;
@@ -745,7 +774,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
-          queue: state.queue,
+            queue: state.queue,
           ),
         );
         return;
@@ -772,43 +801,18 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           _activeCloudJobId != null || state is TranscriptionProcessing;
 
       if (isProcessingActive) {
-        // Check queue size before adding
-        final currentQueueLength = state.queue.length;
-        if (currentQueueLength >= _kMaxQueueSize) {
-          // Queue is full - delete the audio file and show warning
-          try {
-            final file = File(audioPath);
-            if (await file.exists()) {
-              await file.delete();
-              debugPrint('[Queue] Deleted audio file - queue is full: $audioPath');
-            }
-          } catch (e) {
-            debugPrint('[Queue] Failed to delete audio file: $e');
-          }
-          _emitNotice(
-            emit,
-            'You have $_kMaxQueueSize pending transcriptions. Please wait or cancel some items.',
-            severity: TranscriptionNoticeSeverity.warning,
-          );
-          return;
-        }
-
         // Queue the audio for processing later using new queue system
+        // Queue size check is handled in _onQueueJobAdded to avoid duplicate warnings
         add(
           QueueJobAdded(
             audioPath: audioPath,
             duration: duration,
             fileSizeBytes: fileSizeBytes,
-            isOnlineMode: _plannedExecutionMode == TranscriptionExecutionMode.online,
+            isOnlineMode:
+                _plannedExecutionMode == TranscriptionExecutionMode.online,
           ),
         );
-
-        final queueLength = state.queue.length + 1; // +1 because event hasn't processed yet
-        _emitNotice(
-          emit,
-          'Recording saved. $queueLength audio(s) in queue.',
-          severity: TranscriptionNoticeSeverity.info,
-        );
+        // Notice will be shown by _onQueueJobAdded handler
       } else {
         // Process immediately (not queued)
         final useOnline =
@@ -840,7 +844,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     } catch (error) {
       emit(
         TranscriptionError(
-          message: 'Failed to stop recording: ${error.toString()}. The recording may have been interrupted.',
+          message:
+              'Failed to stop recording: ${error.toString()}. The recording may have been interrupted.',
           history: List.unmodifiable(_history),
           preferences: _preferences,
           queueLength: state.queue.length,
@@ -861,7 +866,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     Emitter<TranscriptionState> emit,
   ) async {
     final audioPath = event.audioPath;
-    
+
     // Check if this is a queued job
     final queuedJob = _findQueuedJobByAudioPath(audioPath);
     final isQueuedJob = queuedJob != null;
@@ -891,7 +896,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           final failedTranscription = await _createFailedTranscription(
             audioPath: audioPath,
             failureType: 'transcription',
-            errorMessage: failure.message ?? 'Audio transcription processing failed. The audio file may be corrupted or the transcription service encountered an error.',
+            errorMessage: failure.message ??
+                'Audio transcription processing failed. The audio file may be corrupted or the transcription service encountered an error.',
             duration: _pendingFallbackDuration,
             fileSizeBytes: _pendingFallbackSizeBytes,
           );
@@ -917,13 +923,15 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             add(
               QueueJobFailed(
                 jobId: queuedJob.id,
-                errorMessage: failure.message ?? 'Audio transcription processing failed. The audio file may be corrupted or the transcription service encountered an error.',
+                errorMessage: failure.message ??
+                    'Audio transcription processing failed. The audio file may be corrupted or the transcription service encountered an error.',
               ),
             );
           } else {
             emit(
               TranscriptionError(
-                message: failure.message ?? 'Audio transcription processing failed. The audio file may be corrupted or the transcription service encountered an error.',
+                message: failure.message ??
+                    'Audio transcription processing failed. The audio file may be corrupted or the transcription service encountered an error.',
                 history: List.unmodifiable(_history),
                 preferences: _preferences,
                 queueLength: state.queue.length,
@@ -936,7 +944,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         },
         (transcription) {
           _history.insert(0, transcription);
-          
+
           // Only delete file if note generation succeeded (for non-queued jobs)
           // For queued jobs, deletion is handled by the queue job success handler
           if (!isQueuedJob) {
@@ -1005,7 +1013,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       } else {
         emit(
           TranscriptionError(
-            message: 'Unable to process audio: ${error.toString()}. The audio file may be corrupted, inaccessible, or the transcription service encountered an unexpected error.',
+            message:
+                'Unable to process audio: ${error.toString()}. The audio file may be corrupted, inaccessible, or the transcription service encountered an unexpected error.',
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
@@ -1088,8 +1097,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     final result = await _createTranscriptionJob(request);
     return result.fold(
       (failure) {
-        _lastCloudFailureMessage =
-            failure.message ?? 'Cloud transcription service is unavailable. Check your internet connection or try offline mode.';
+        _lastCloudFailureMessage = failure.message ??
+            'Cloud transcription service is unavailable. Check your internet connection or try offline mode.';
         _emitNotice(
           emit,
           _lastCloudFailureMessage!,
@@ -1107,7 +1116,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
-          queue: state.queue,
+            queue: state.queue,
           ),
         );
         return true;
@@ -1173,14 +1182,13 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     _activeCloudJobId = null;
     await _cloudJobSubscription?.cancel();
     _cloudJobSubscription = null;
-    
+
     // Check if this is a queued job
     final audioPath = _pendingFallbackAudioPath;
-    final queuedJob = audioPath != null 
-        ? _findQueuedJobByAudioPath(audioPath)
-        : null;
+    final queuedJob =
+        audioPath != null ? _findQueuedJobByAudioPath(audioPath) : null;
     final isQueuedJob = queuedJob != null;
-    
+
     if (job.status == TranscriptionJobStatus.completed &&
         job.transcriptId != null) {
       final result =
@@ -1215,10 +1223,15 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           // Check if note generation failed
           if (job.noteStatus == 'error') {
             // Update transcription to mark as failed (note generation failure)
+            // ✅ FIX: Use local audio path from fallback context instead of transcription.audioPath
+            // The transcription.audioPath from cloud may be incorrect (basename or storage path)
+            final correctAudioPath =
+                _pendingFallbackAudioPath ?? transcription.audioPath;
+
             final failedTranscription = Transcription(
               id: transcription.id,
               text: transcription.text,
-              audioPath: transcription.audioPath,
+              audioPath: correctAudioPath,
               duration: transcription.duration,
               timestamp: transcription.timestamp,
               confidence: transcription.confidence,
@@ -1260,11 +1273,12 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
               );
             } else {
               // Don't delete audio file - keep for retry
+              // Emit error state instead of success for failed note generation
               emit(
-                TranscriptionSuccess(
-                  transcription: failedTranscription,
+                TranscriptionError(
+                  message:
+                      'Transcription succeeded but note generation failed. You can retry from Recent Notes.',
                   history: List.unmodifiable(_history),
-                  metrics: null,
                   preferences: _preferences,
                   queueLength: state.queue.length,
                   queue: state.queue,
@@ -1276,7 +1290,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             _history.insert(0, transcription);
             // ✅ CHECK: Only delete if note generation is complete and successful
             final shouldDeleteFile = job.noteStatus == 'ready';
-            
+
             if (isQueuedJob && queuedJob != null) {
               // Check if we should delete the file before updating job status
               // Create a temporary job object with success status for policy check
@@ -1289,7 +1303,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
                 noteStatus: job.noteStatus,
                 transcriptionSucceeded: true,
               );
-              
+
               // Update queued job as succeeded
               add(
                 QueueJobSucceeded(
@@ -1297,7 +1311,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
                   noteId: transcription.id,
                 ),
               );
-              
+
               // Delete file using centralized policy
               if (shouldDelete) {
                 await _deleteFileForJob(queuedJob.audioPath);
@@ -1325,8 +1339,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         },
       );
     } else if (job.status == TranscriptionJobStatus.error) {
-      _lastCloudFailureMessage =
-          job.errorMessage ?? 'Cloud transcription job failed. The server may be experiencing issues or the audio file may be invalid.';
+      _lastCloudFailureMessage = job.errorMessage ??
+          'Cloud transcription job failed. The server may be experiencing issues or the audio file may be invalid.';
 
       if (isQueuedJob && queuedJob != null) {
         // Update queued job as failed
@@ -1350,7 +1364,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           );
 
           if (failedTranscription != null) {
-            final saveResult = await _transcriptionRepository.updateTranscription(
+            final saveResult =
+                await _transcriptionRepository.updateTranscription(
               failedTranscription,
             );
             saveResult.fold(
@@ -1381,8 +1396,13 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
   ) async {
     await event.result.fold(
       (failure) async {
-        _lastCloudFailureMessage =
-            failure.message ?? 'Cloud transcription job failed. The server may be experiencing issues or the audio file may be invalid.';
+        // Clear cloud job state on stream error to unblock queue processing
+        _activeCloudJobId = null;
+        await _cloudJobSubscription?.cancel();
+        _cloudJobSubscription = null;
+
+        _lastCloudFailureMessage = failure.message ??
+            'Cloud transcription job failed. The server may be experiencing issues or the audio file may be invalid.';
         _promptOfflineFallback(
           emit,
           reason: _lastCloudFailureMessage,
@@ -1395,7 +1415,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
-          queue: state.queue,
+            queue: state.queue,
           ),
         );
 
@@ -1419,7 +1439,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     result.fold(
       (failure) => emit(
         TranscriptionError(
-          message: failure.message ?? 'Unable to cancel cloud transcription job. It may have already completed or been cancelled.',
+          message: failure.message ??
+              'Unable to cancel cloud transcription job. It may have already completed or been cancelled.',
           history: List.unmodifiable(_history),
           preferences: _preferences,
           queueLength: state.queue.length,
@@ -1445,7 +1466,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     result.fold(
       (failure) => emit(
         TranscriptionError(
-          message: failure.message ?? 'Unable to request transcription retry. The job may no longer exist or the service is unavailable.',
+          message: failure.message ??
+              'Unable to request transcription retry. The job may no longer exist or the service is unavailable.',
           history: List.unmodifiable(_history),
           preferences: _preferences,
           queueLength: state.queue.length,
@@ -1463,21 +1485,41 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     RetryNoteGeneration event,
     Emitter<TranscriptionState> emit,
   ) async {
+    // ✅ FIX: Find the failed transcription to get audio path and other context
+    final failedTranscription = _history.firstWhere(
+      (t) => t.originalJobId == event.jobId,
+      orElse: () => _history.first, // Fallback (shouldn't happen)
+    );
+
+    // Set fallback context so _finalizeCloudJob can use it for retry
+    _setFallbackContext(
+      audioPath: failedTranscription.audioPath,
+      duration: failedTranscription.duration,
+      fileSizeBytes: failedTranscription.fileSizeBytes ?? 0,
+    );
+
     final result = await _requestNoteRetry(event.jobId);
     result.fold(
       (failure) => emit(
         TranscriptionError(
-          message: failure.message ?? 'Unable to retry note generation. The transcription job may not be available or the service is unavailable.',
+          message: failure.message ??
+              'Unable to retry note generation. The transcription job may not be available or the service is unavailable.',
           history: List.unmodifiable(_history),
           preferences: _preferences,
           queueLength: state.queue.length,
           queue: state.queue,
         ),
       ),
-      (_) => _emitNotice(
-        emit,
-        'Retrying smart note generation...',
-      ),
+      (_) {
+        // ✅ FIX: Start listening to the job to know when retry completes
+        _activeCloudJobId = event.jobId;
+        _listenToCloudJob(event.jobId);
+
+        _emitNotice(
+          emit,
+          'Retrying smart note generation...',
+        );
+      },
     );
   }
 
@@ -1564,11 +1606,12 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       (failure) async {
         emit(
           TranscriptionError(
-            message: failure.message ?? 'Failed to delete transcription from storage. It may have already been deleted or the storage service is unavailable.',
+            message: failure.message ??
+                'Failed to delete transcription from storage. It may have already been deleted or the storage service is unavailable.',
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
-          queue: state.queue,
+            queue: state.queue,
           ),
         );
       },
@@ -1581,7 +1624,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
-          queue: state.queue,
+            queue: state.queue,
           ),
         );
       },
@@ -1598,11 +1641,12 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       (failure) async {
         emit(
           TranscriptionError(
-            message: failure.message ?? 'Failed to update transcription in storage. The transcription may have been deleted or the storage service is unavailable. Please try again.',
+            message: failure.message ??
+                'Failed to update transcription in storage. The transcription may have been deleted or the storage service is unavailable. Please try again.',
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
-          queue: state.queue,
+            queue: state.queue,
           ),
         );
       },
@@ -1619,7 +1663,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
             history: List.unmodifiable(_history),
             preferences: _preferences,
             queueLength: state.queue.length,
-          queue: state.queue,
+            queue: state.queue,
           ),
         );
       },
@@ -1661,7 +1705,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           (failure) async {
             emit(
               TranscriptionError(
-                message: failure.message ?? 'Transcription not found in storage. It may have been deleted or the ID is invalid.',
+                message: failure.message ??
+                    'Transcription not found in storage. It may have been deleted or the ID is invalid.',
                 history: List.unmodifiable(_history),
                 preferences: _preferences,
                 queueLength: state.queue.length,
@@ -1732,7 +1777,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         (failure) async {
           emit(
             TranscriptionError(
-              message: failure.message ?? 'Failed to format transcription note. The service may be unavailable or the transcription may be invalid.',
+              message: failure.message ??
+                  'Failed to format transcription note. The service may be unavailable or the transcription may be invalid.',
               history: List.unmodifiable(_history),
               preferences: _preferences,
               queueLength: state.queue.length,
@@ -1767,7 +1813,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     } catch (error) {
       emit(
         TranscriptionError(
-          message: 'An unexpected error occurred while formatting the note: ${error.toString()}. Please try again.',
+          message:
+              'An unexpected error occurred while formatting the note: ${error.toString()}. Please try again.',
           history: List.unmodifiable(_history),
           preferences: _preferences,
           queueLength: state.queue.length,
@@ -1898,7 +1945,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           ..removeAt(jobIndex);
         _emitStateWithUpdatedQueue(emit, updatedQueue);
         await _saveQueue(updatedQueue);
-        debugPrint('[Queue] Removed job ${waitingJob.id} - source audio missing (error: "Source audio missing")');
+        debugPrint(
+            '[Queue] Removed job ${waitingJob.id} - source audio missing (error: "Source audio missing")');
       }
       return;
     }
@@ -1907,8 +1955,17 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     final fileSizeBytes = waitingJob.fileSizeBytes ?? await audioFile.length();
     final duration = waitingJob.duration ?? const Duration(seconds: 0);
 
-    // Mark job as processing
-    add(QueueJobProcessingStarted(waitingJob.id));
+    // Mark job as processing - update synchronously to avoid race condition
+    final updatedQueue = List<QueuedTranscriptionJob>.from(state.queue);
+    final jobIndex = updatedQueue.indexWhere((j) => j.id == waitingJob.id);
+    if (jobIndex != -1) {
+      updatedQueue[jobIndex] = waitingJob.copyWith(
+        status: QueuedTranscriptionJobStatus.processing,
+        updatedAt: DateTime.now(),
+      );
+      _emitStateWithUpdatedQueue(emit, updatedQueue);
+      await _saveQueue(updatedQueue);
+    }
 
     // Set fallback context
     _setFallbackContext(
@@ -1986,6 +2043,15 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     if (current is TranscriptionRecording) {
       emit(
         current.copyWith(
+          history: current.history,
+          preferences: _preferences,
+          queueLength: queueLen,
+          queue: updatedQueue,
+        ),
+      );
+    } else if (current is TranscriptionStopping) {
+      emit(
+        TranscriptionStopping(
           history: current.history,
           preferences: _preferences,
           queueLength: queueLen,
@@ -2087,7 +2153,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         final file = File(event.audioPath);
         if (await file.exists()) {
           await file.delete();
-          debugPrint('[Queue] Deleted audio file that exceeded queue limit: ${event.audioPath}');
+          debugPrint(
+              '[Queue] Deleted audio file that exceeded queue limit: ${event.audioPath}');
         }
       } catch (e) {
         debugPrint('[Queue] Failed to delete audio file: $e');
@@ -2110,6 +2177,13 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     final updatedQueue = [...currentQueue, job];
     _emitStateWithUpdatedQueue(emit, updatedQueue);
     await _saveQueue(updatedQueue);
+
+    // Show success notice with queue count
+    _emitNotice(
+      emit,
+      'Recording saved. ${updatedQueue.length} audio(s) in queue.',
+      severity: TranscriptionNoticeSeverity.info,
+    );
 
     // Try to process if no active processing
     await _processNextQueuedJob(emit);
@@ -2159,19 +2233,21 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     // For offline mode: verify note is safely stored before deleting
     // For online mode: deletion is handled in _finalizeCloudJob when noteStatus == 'ready'
     bool transcriptionSucceeded = true;
-    
+
     // For offline mode, verify the transcription exists in repository before deleting
     if (updatedJob.isOnlineMode == false && event.noteId != null) {
-      final verifyResult = await _transcriptionRepository.getTranscription(event.noteId);
+      final verifyResult =
+          await _transcriptionRepository.getTranscription(event.noteId);
       transcriptionSucceeded = verifyResult.fold(
         (failure) {
-          debugPrint('[Queue] Failed to verify transcription storage: ${failure.message}');
+          debugPrint(
+              '[Queue] Failed to verify transcription storage: ${failure.message}');
           return false;
         },
         (transcription) => transcription != null,
       );
     }
-    
+
     final shouldDelete = await _cleanupAudioIfNotNeeded(
       job: updatedJob,
       noteStatus: null, // For offline mode, we don't have noteStatus yet
@@ -2181,15 +2257,18 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       await _deleteFileForJob(job.audioPath);
     }
 
+    // Clear fallback context after processing to prevent stale data
+    _clearFallbackContext();
+
     // Process next job
     await _processNextQueuedJob(emit);
   }
 
   /// Encapsulates the decision logic for when to delete audio files after successful processing.
   /// This policy can evolve later without affecting call sites.
-  /// 
+  ///
   /// Returns true if the audio file should be deleted, false otherwise.
-  /// 
+  ///
   /// Deletion criteria:
   /// - For online mode: delete only when note generation is complete (noteStatus == 'ready')
   /// - For offline mode: delete when transcription succeeds (note is safely stored)
@@ -2258,6 +2337,9 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     _emitStateWithUpdatedQueue(emit, updatedQueue);
     await _saveQueue(updatedQueue);
 
+    // Clear fallback context after processing to prevent stale data
+    _clearFallbackContext();
+
     // Process next job
     await _processNextQueuedJob(emit);
   }
@@ -2277,7 +2359,20 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       return;
     }
 
-    // Remove from queue (don't delete audio file per requirements)
+    // Delete audio file for cancelled job to avoid orphaned temp files
+    try {
+      final file = File(job.audioPath);
+      if (await file.exists()) {
+        await file.delete();
+        debugPrint(
+            '[Queue] Deleted audio file for cancelled job: ${job.audioPath}');
+      }
+    } catch (e) {
+      debugPrint('[Queue] Failed to delete audio file for cancelled job: $e');
+      // Best-effort cleanup - continue with queue removal
+    }
+
+    // Remove from queue
     final updatedQueue = List<QueuedTranscriptionJob>.from(currentQueue)
       ..removeAt(jobIndex);
     _emitStateWithUpdatedQueue(emit, updatedQueue);
@@ -2319,31 +2414,34 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     Emitter<TranscriptionState> emit,
   ) async {
     debugPrint('[Queue] Resuming processing after app pause');
-    
+
     final currentQueue = state.queue;
-    final processingJobs = currentQueue.where(
-      (job) => job.status == QueuedTranscriptionJobStatus.processing,
-    ).toList();
-    
+    final processingJobs = currentQueue
+        .where(
+          (job) => job.status == QueuedTranscriptionJobStatus.processing,
+        )
+        .toList();
+
     if (processingJobs.isEmpty) {
       // No processing jobs to reset, just check for waiting jobs
       final hasWaitingJobs = currentQueue.any(
         (job) => job.status == QueuedTranscriptionJobStatus.waiting,
       );
-      
+
       if (hasWaitingJobs) {
         debugPrint('[Queue] Resuming - processing waiting jobs');
         await _processNextQueuedJob(emit);
       }
       return;
     }
-    
+
     // Reset stuck processing jobs to waiting
-    debugPrint('[Queue] Resetting ${processingJobs.length} stuck processing jobs to waiting');
-    
+    debugPrint(
+        '[Queue] Resetting ${processingJobs.length} stuck processing jobs to waiting');
+
     final updatedQueue = List<QueuedTranscriptionJob>.from(currentQueue);
     final now = DateTime.now();
-    
+
     for (final job in processingJobs) {
       final jobIndex = updatedQueue.indexWhere((j) => j.id == job.id);
       if (jobIndex != -1) {
@@ -2354,11 +2452,11 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         debugPrint('[Queue] Reset job ${job.id} from processing to waiting');
       }
     }
-    
+
     // Update state and save
     _emitStateWithUpdatedQueue(emit, updatedQueue);
     await _saveQueue(updatedQueue);
-    
+
     // Resume processing
     await _processNextQueuedJob(emit);
   }
@@ -2370,7 +2468,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       // Stop speed tests when app goes to background
       debugPrint('[SpeedTest] App paused: stopping monitoring');
       _stopSpeedTestMonitoring();
-      
+
       // Handle transcription jobs - save queue state
       _handleAppPaused();
     } else if (state == AppLifecycleState.resumed) {
@@ -2380,7 +2478,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         debugPrint('[SpeedTest] Resuming monitoring');
         _startSpeedTestMonitoring();
       }
-      
+
       // Resume transcription jobs
       _handleAppResumed();
     }
@@ -2390,25 +2488,39 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     // Save queue state before pausing to prevent data loss
     try {
       _saveQueue(state.queue);
-      debugPrint('[Queue] App paused - queue state saved (${state.queue.length} jobs)');
+      debugPrint(
+          '[Queue] App paused - queue state saved (${state.queue.length} jobs)');
     } catch (e) {
       debugPrint('[Queue] Failed to save queue on pause: $e');
     }
   }
 
   void _handleAppResumed() {
+    // Clear potentially stale cloud job state
+    // Cloud job subscription may be stale after app pause
+    if (_activeCloudJobId != null) {
+      debugPrint(
+          '[Queue] App resumed - clearing stale cloud job: $_activeCloudJobId');
+      _activeCloudJobId = null;
+      _cloudJobSubscription?.cancel();
+      _cloudJobSubscription = null;
+    }
+
     // Check for stuck processing jobs and trigger resume event
     final currentQueue = state.queue;
-    final processingJobs = currentQueue.where(
-      (job) => job.status == QueuedTranscriptionJobStatus.processing,
-    ).toList();
-    
+    final processingJobs = currentQueue
+        .where(
+          (job) => job.status == QueuedTranscriptionJobStatus.processing,
+        )
+        .toList();
+
     final hasWaitingJobs = currentQueue.any(
       (job) => job.status == QueuedTranscriptionJobStatus.waiting,
     );
-    
+
     if (processingJobs.isNotEmpty || hasWaitingJobs) {
-      debugPrint('[Queue] App resumed - found ${processingJobs.length} processing jobs and ${hasWaitingJobs ? "waiting" : "no waiting"} jobs');
+      debugPrint(
+          '[Queue] App resumed - found ${processingJobs.length} processing jobs and ${hasWaitingJobs ? "waiting" : "no waiting"} jobs');
       // Trigger resume event to reset stuck jobs and continue processing
       add(const ResumeProcessingAfterPause());
     }

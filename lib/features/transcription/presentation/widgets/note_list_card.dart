@@ -35,6 +35,8 @@ class NoteListCard extends StatelessWidget {
     final isFailed = transcription.isFailed;
     final rawText = transcription.text ?? '';
     final baseTitle = transcription.title ?? rawText;
+    final isNoSpeechDetected =
+        transcription.metadata['no_speech_detected'] == true;
 
     final title = isFailed
         ? 'Failed note generation'
@@ -95,8 +97,39 @@ class NoteListCard extends StatelessWidget {
                   ),
                 ],
               ),
+              if (isNoSpeechDetected) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _kAccentCoral.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _kAccentCoral.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 14,
+                        color: _kAccentCoral,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'No speech detected',
+                        style: TextStyle(
+                          color: _kAccentCoral,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
-              if (previewText.isNotEmpty)
+              if (previewText.isNotEmpty && !isNoSpeechDetected)
                 Text(
                   previewText,
                   maxLines: 2,

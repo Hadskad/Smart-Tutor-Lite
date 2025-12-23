@@ -1,10 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:injectable/injectable.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/failures.dart';
+import '../../../../core/services/audio_converter.dart';
 import '../../../../native_bridge/whisper_ffi.dart';
 
 abstract class WhisperLocalDataSource {
@@ -16,9 +18,10 @@ abstract class WhisperLocalDataSource {
 
 @LazySingleton(as: WhisperLocalDataSource)
 class WhisperLocalDataSourceImpl implements WhisperLocalDataSource {
-  WhisperLocalDataSourceImpl(this._whisperFfi);
+  WhisperLocalDataSourceImpl(this._whisperFfi, this._audioConverter);
 
   final WhisperFfi _whisperFfi;
+  final AudioConverter _audioConverter;
 
   @override
   Future<String> transcribe(
@@ -61,18 +64,30 @@ class WhisperLocalDataSourceImpl implements WhisperLocalDataSource {
   }
 
   Future<String> _prepareAudio(String sourcePath) async {
-    // Offline recordings are already in WAV/16kHz/mono format via RecordConfig
-    // Simply verify the file has .wav extension
+    // Check if file is already in WAV format
     final hasWavExtension = p.extension(sourcePath).toLowerCase() == '.wav';
     
-    if (!hasWavExtension) {
-      throw WhisperRuntimeFailure(
-        message: 'Only WAV files are supported for offline transcription. '
-            'Offline recordings are automatically saved in the correct format.',
-        cause: Exception('Unsupported audio format: ${p.extension(sourcePath)}'),
-      );
+    if (hasWavExtension) {
+      // Offline recordings are already in WAV/16kHz/mono format via RecordConfig
+      return sourcePath;
     }
     
-    return sourcePath;
+    // Non-WAV files need conversion (e.g., M4A from online mode fallback)
+    debugPrint('[WhisperLocalDataSource] Converting non-WAV file: $sourcePath');
+    try {
+      final convertedPath = await _audioConverter.convertToWav(sourcePath);
+      debugPrint('[WhisperLocalDataSource] Conversion successful: $convertedPath');
+      return convertedPath;
+    } on AudioConversionFailure catch (e) {
+      throw WhisperRuntimeFailure(
+        message: 'Failed to convert audio file for transcription: ${e.message}',
+        cause: e,
+      );
+    } catch (e) {
+      throw WhisperRuntimeFailure(
+        message: 'Unexpected error during audio conversion',
+        cause: e,
+      );
+    }
   }
 }

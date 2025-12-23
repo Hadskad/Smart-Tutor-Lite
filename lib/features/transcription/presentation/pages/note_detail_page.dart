@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../../../injection_container.dart';
 import '../../../study_mode/presentation/bloc/study_mode_bloc.dart';
@@ -320,17 +321,79 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Summary Section
+        // Summary Section with Markdown support
         if (note['summary'] != null && (note['summary'] as String?)?.isNotEmpty == true)
           _buildSection(
             title: 'Summary',
             icon: Icons.summarize_outlined,
-            child: SelectableText(
-              note['summary'] as String,
-              style: const TextStyle(
-                color: _kLightGray,
-                fontSize: 16,
-                height: 1.6,
+            child: MarkdownBody(
+              data: note['summary'] as String,
+              selectable: true,
+              styleSheet: MarkdownStyleSheet(
+                p: const TextStyle(
+                  color: _kLightGray,
+                  fontSize: 16,
+                  height: 1.6,
+                ),
+                h1: const TextStyle(
+                  color: _kWhite,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  height: 1.5,
+                ),
+                h2: const TextStyle(
+                  color: _kWhite,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  height: 1.4,
+                ),
+                h3: const TextStyle(
+                  color: _kWhite,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  height: 1.4,
+                ),
+                h4: const TextStyle(
+                  color: _kWhite,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  height: 1.3,
+                ),
+                strong: const TextStyle(
+                  color: _kWhite,
+                  fontWeight: FontWeight.bold,
+                ),
+                em: const TextStyle(
+                  color: _kLightGray,
+                  fontStyle: FontStyle.italic,
+                ),
+                code: TextStyle(
+                  backgroundColor: Colors.black.withOpacity(0.3),
+                  color: _kAccentBlue,
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                ),
+                codeblockDecoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                listBullet: const TextStyle(
+                  color: _kAccentBlue,
+                  fontSize: 16,
+                ),
+                blockquote: TextStyle(
+                  color: _kLightGray.withOpacity(0.8),
+                  fontStyle: FontStyle.italic,
+                ),
+                blockquoteDecoration: BoxDecoration(
+                  color: _kCardColor,
+                  border: Border(
+                    left: BorderSide(
+                      color: _kAccentBlue,
+                      width: 4,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

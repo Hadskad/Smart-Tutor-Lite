@@ -297,6 +297,21 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
         ],
       );
     }
+    if (state is TranscriptionStopping) {
+      return Column(
+        children: [
+          _StatusContainer(
+            icon: Icons.stop_circle_rounded,
+            color: _kAccentBlue,
+            label: 'Finalizing recording...',
+          ),
+          if (hasQueue) ...[
+            const SizedBox(height: 12),
+            _QueueStatusContainer(queueLength: queueLength),
+          ],
+        ],
+      );
+    }
     if (state is TranscriptionProcessing) {
       return Column(
         children: [
