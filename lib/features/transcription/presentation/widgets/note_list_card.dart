@@ -9,6 +9,7 @@ const Color _kAccentCoral = Color(0xFFFF7043);
 const Color _kWhite = Colors.white;
 const Color _kLightGray = Color(0xFFCCCCCC);
 const Color _kDarkGray = Color(0xFF888888);
+const Color _kYellow = Color(0xFFFFB74D);
 
 class NoteListCard extends StatelessWidget {
   const NoteListCard({
@@ -19,7 +20,9 @@ class NoteListCard extends StatelessWidget {
     this.onDelete,
     this.onCreateFlashcards,
     this.onRetry,
+    this.onFormatNote,
     this.showActions = true,
+    this.isFormatting = false,
   });
 
   final Transcription transcription;
@@ -28,7 +31,9 @@ class NoteListCard extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onCreateFlashcards;
   final VoidCallback? onRetry;
+  final VoidCallback? onFormatNote;
   final bool showActions;
+  final bool isFormatting;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +42,8 @@ class NoteListCard extends StatelessWidget {
     final baseTitle = transcription.title ?? rawText;
     final isNoSpeechDetected =
         transcription.metadata['no_speech_detected'] == true;
+    final isUnformatted =
+        !isFailed && transcription.structuredNote == null && rawText.isNotEmpty;
 
     final title = isFailed
         ? 'Failed note generation'
@@ -128,6 +135,38 @@ class NoteListCard extends StatelessWidget {
                   ),
                 ),
               ],
+              // Show unformatted badge for offline notes
+              if (isUnformatted && !isNoSpeechDetected) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _kYellow.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _kYellow.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.auto_awesome,
+                        size: 14,
+                        color: _kYellow,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Raw note - tap to format',
+                        style: TextStyle(
+                          color: _kYellow,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               if (previewText.isNotEmpty && !isNoSpeechDetected)
                 Text(
@@ -173,7 +212,30 @@ class NoteListCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      if (!isFailed && onCreateFlashcards != null)
+                      // Show Format button for unformatted notes
+                      if (isUnformatted && onFormatNote != null)
+                        Flexible(
+                          child: TextButton.icon(
+                            icon: isFormatting
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: _kYellow,
+                                    ),
+                                  )
+                                : const Icon(Icons.auto_awesome, size: 15),
+                            label: Text(isFormatting ? 'Formatting...' : 'Format'),
+                            onPressed: isFormatting ? null : onFormatNote,
+                            style: TextButton.styleFrom(
+                              foregroundColor: _kYellow,
+                              disabledForegroundColor: _kYellow.withOpacity(0.5),
+                            ),
+                          ),
+                        )
+                      // Show Create Flashcards for formatted notes
+                      else if (!isFailed && onCreateFlashcards != null)
                         Flexible(
                           child: TextButton.icon(
                             icon: const Icon(Icons.style_outlined, size: 15),

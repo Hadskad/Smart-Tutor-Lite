@@ -20,7 +20,7 @@ class TranscriptionPreferences extends Equatable {
   }
 
   @override
-  List<Object?> get props => [alwaysUseOffline];
+  List<Object?> get props => [alwaysUseOffline, useFastWhisperModel];
 }
 
 

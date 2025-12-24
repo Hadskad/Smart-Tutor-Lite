@@ -12,6 +12,7 @@ class TtsJobModel extends TtsJob {
     super.errorMessage,
     super.operationName,
     super.storagePath,
+    super.localPath,
   });
 
   factory TtsJobModel.fromJson(Map<String, dynamic> json) {
@@ -27,6 +28,7 @@ class TtsJobModel extends TtsJob {
       errorMessage: json['errorMessage'] as String?,
       operationName: json['operationName'] as String?,
       storagePath: json['storagePath'] as String?,
+      localPath: json['localPath'] as String?,
     );
   }
 
@@ -42,6 +44,7 @@ class TtsJobModel extends TtsJob {
       if (errorMessage != null) 'errorMessage': errorMessage,
       if (operationName != null) 'operationName': operationName,
       if (storagePath != null) 'storagePath': storagePath,
+      if (localPath != null) 'localPath': localPath,
     };
   }
 
@@ -56,6 +59,7 @@ class TtsJobModel extends TtsJob {
     String? errorMessage,
     String? operationName,
     String? storagePath,
+    String? localPath,
   }) {
     return TtsJobModel(
       id: id ?? this.id,
@@ -68,6 +72,7 @@ class TtsJobModel extends TtsJob {
       errorMessage: errorMessage ?? this.errorMessage,
       operationName: operationName ?? this.operationName,
       storagePath: storagePath ?? this.storagePath,
+      localPath: localPath ?? this.localPath,
     );
   }
 
@@ -83,6 +88,7 @@ class TtsJobModel extends TtsJob {
       errorMessage: entity.errorMessage,
       operationName: entity.operationName,
       storagePath: entity.storagePath,
+      localPath: entity.localPath,
     );
   }
 
@@ -98,6 +104,7 @@ class TtsJobModel extends TtsJob {
       errorMessage: errorMessage,
       operationName: operationName,
       storagePath: storagePath,
+      localPath: localPath,
     );
   }
 }

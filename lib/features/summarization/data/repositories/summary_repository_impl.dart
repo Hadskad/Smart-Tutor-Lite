@@ -84,7 +84,7 @@ class SummaryRepositoryImpl implements SummaryRepository {
           createdAt: DateTime.now(),
         );
         await _queueDataSource.addToQueue(queueItem);
-        
+
         // Return a special failure that indicates the request was queued
         return Left(
           NetworkFailure(
@@ -130,7 +130,7 @@ class SummaryRepositoryImpl implements SummaryRepository {
           createdAt: DateTime.now(),
         );
         await _queueDataSource.addToQueue(queueItem);
-        
+
         // Return a special failure that indicates the request was queued
         return Left(
           NetworkFailure(

@@ -211,7 +211,28 @@ class TtsRepositoryImpl implements TtsRepository {
     try {
       // Get from cache (offline-first)
       final cached = await _getAllFromCache();
-      return Right(cached.map((model) => model.toEntity()).toList());
+      
+      // Check for local audio paths for each completed job
+      final jobsWithLocalPaths = <TtsJob>[];
+      for (final job in cached) {
+        if (job.status == 'completed' && job.audioUrl.isNotEmpty) {
+          // Check if local path is already set or exists
+          String? localPath = job.localPath;
+          if (localPath == null || localPath.isEmpty) {
+            localPath = await _getLocalAudioPath(job.id);
+            if (localPath != null) {
+              // Update cache with local path
+              final updatedJob = job.copyWith(localPath: localPath);
+              await _cacheTtsJob(updatedJob);
+              jobsWithLocalPaths.add(updatedJob.toEntity());
+              continue;
+            }
+          }
+        }
+        jobsWithLocalPaths.add(job.toEntity());
+      }
+      
+      return Right(jobsWithLocalPaths);
     } catch (error) {
       return Left(
         LocalFailure(
@@ -225,8 +246,37 @@ class TtsRepositoryImpl implements TtsRepository {
   @override
   Future<Either<Failure, Unit>> deleteTtsJob(String id) async {
     try {
+      // Delete from local cache
       final box = await _openCacheBox();
       await box.delete(id);
+      
+      // Delete local audio file if exists
+      try {
+        final localPath = await _getLocalAudioPath(id);
+        if (localPath != null) {
+          final file = File(localPath);
+          if (await file.exists()) {
+            await file.delete();
+            debugPrint('Deleted local audio file for job $id');
+          }
+        }
+      } catch (e) {
+        // Ignore errors deleting local file
+        debugPrint('Failed to delete local audio file for job $id: $e');
+      }
+      
+      // Delete from remote backend (if online)
+      try {
+        final connected = await _networkInfo.isConnected;
+        if (connected) {
+          await _remoteDataSource.deleteTtsJob(id);
+          debugPrint('Deleted TTS job from backend: $id');
+        }
+      } catch (e) {
+        // Don't fail if remote delete fails - local is already deleted
+        debugPrint('Failed to delete TTS job from backend: $e');
+      }
+      
       return const Right(unit);
     } catch (error) {
       return Left(
@@ -345,9 +395,10 @@ class TtsRepositoryImpl implements TtsRepository {
 
   /// Download audio file from Firebase Storage URL to local cache
   /// Stores audio in app's documents directory for offline access
-  Future<void> _downloadAudioToLocalCache(TtsJobModel job) async {
+  /// Returns the local path if successful, null otherwise
+  Future<String?> _downloadAudioToLocalCache(TtsJobModel job) async {
     if (job.audioUrl.isEmpty) {
-      return; // No audio URL to download
+      return null; // No audio URL to download
     }
 
     try {
@@ -370,17 +421,35 @@ class TtsRepositoryImpl implements TtsRepository {
       );
 
       if (response.statusCode == 200) {
-        // Update job model with local path (optional - audioUrl already works)
-        // The local path can be used for offline playback
-        // Note: This requires updating the model to store localPath if needed
-        // For now, we just cache the file locally, the audioUrl in metadata is sufficient
         debugPrint('Audio downloaded successfully for job ${job.id} to $audioPath');
+        
+        // Update the cached job with the local path
+        final updatedJob = job.copyWith(localPath: audioPath);
+        await _cacheTtsJob(updatedJob);
+        
+        return audioPath;
       }
+      return null;
     } catch (error) {
       // Download failed - don't throw, just log
       // The audioUrl in cached metadata can still be used when online
       debugPrint('Failed to download audio for job ${job.id}: $error');
-      rethrow; // Re-throw so caller can handle gracefully
+      return null;
     }
+  }
+
+  /// Check if audio file exists locally and return the path
+  Future<String?> _getLocalAudioPath(String jobId) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final audioPath = '${appDir.path}/tts_audio_cache/$jobId.mp3';
+      final file = File(audioPath);
+      if (await file.exists()) {
+        return audioPath;
+      }
+    } catch (e) {
+      // Ignore errors - just return null
+    }
+    return null;
   }
 }

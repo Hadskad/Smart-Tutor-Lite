@@ -161,4 +161,3 @@ class SummaryQueueLocalDataSourceImpl implements SummaryQueueLocalDataSource {
     }
   }
 }
-

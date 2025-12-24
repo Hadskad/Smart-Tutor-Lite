@@ -17,6 +17,8 @@ abstract class TtsRemoteDataSource {
   });
 
   Future<TtsJobModel> getTtsJob(String id);
+
+  Future<void> deleteTtsJob(String id);
 }
 
 @LazySingleton(as: TtsRemoteDataSource)
@@ -84,6 +86,21 @@ class TtsRemoteDataSourceImpl implements TtsRemoteDataSource {
     } catch (error) {
       throw ServerFailure(
         message: 'Failed to fetch TTS job',
+        cause: error,
+      );
+    }
+  }
+
+  @override
+  Future<void> deleteTtsJob(String id) async {
+    try {
+      await _apiClient.delete<void>(
+        '${ApiConstants.textToSpeech}/$id',
+        parser: (_) {},
+      );
+    } catch (error) {
+      throw ServerFailure(
+        message: 'Failed to delete TTS job',
         cause: error,
       );
     }

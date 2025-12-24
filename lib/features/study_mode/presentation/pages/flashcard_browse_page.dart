@@ -247,19 +247,93 @@ class _FlashcardBrowsePageState extends State<FlashcardBrowsePage> {
       ),
       // FAB to start study session
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => FlashcardViewerPage(
-                flashcards: widget.flashcards,
-              ),
-            ),
-          );
-        },
+        onPressed: () => _showStudySessionDialog(context),
         icon: const Icon(Icons.school),
         label: const Text('Start Study Session'),
         backgroundColor: _kAccentBlue,
         foregroundColor: _kWhite,
+      ),
+    );
+  }
+
+  void _showStudySessionDialog(BuildContext context) {
+    bool shuffle = false;
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: _kCardColor,
+          title: const Text(
+            'Start Study Session',
+            style: TextStyle(color: _kWhite),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${widget.flashcards.length} flashcards to study',
+                style: const TextStyle(color: _kLightGray, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Switch(
+                    value: shuffle,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        shuffle = value;
+                      });
+                    },
+                    activeColor: _kAccentBlue,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Shuffle cards',
+                          style: TextStyle(color: _kWhite, fontSize: 16),
+                        ),
+                        Text(
+                          'Randomize the order of flashcards',
+                          style: TextStyle(color: _kDarkGray, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel', style: TextStyle(color: _kLightGray)),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => FlashcardViewerPage(
+                      flashcards: widget.flashcards,
+                      shuffle: shuffle,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Start'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kAccentBlue,
+                foregroundColor: _kWhite,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

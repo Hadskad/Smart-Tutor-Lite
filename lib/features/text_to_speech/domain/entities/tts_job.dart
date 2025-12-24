@@ -13,6 +13,7 @@ class TtsJob extends Equatable {
     this.errorMessage,
     this.operationName,
     this.storagePath,
+    this.localPath,
   });
 
   final String id;
@@ -25,6 +26,24 @@ class TtsJob extends Equatable {
   final String? errorMessage; // Error message if status is 'failed'
   final String? operationName; // Google Cloud Operation name for tracking long-running operations
   final String? storagePath; // Firebase Storage path for audio file
+  final String? localPath; // Local file path for offline playback
+
+  /// Creates a copy with updated localPath
+  TtsJob copyWithLocalPath(String? localPath) {
+    return TtsJob(
+      id: id,
+      sourceType: sourceType,
+      sourceId: sourceId,
+      audioUrl: audioUrl,
+      status: status,
+      createdAt: createdAt,
+      voice: voice,
+      errorMessage: errorMessage,
+      operationName: operationName,
+      storagePath: storagePath,
+      localPath: localPath,
+    );
+  }
 
   @override
   List<Object?> get props => [
@@ -38,5 +57,6 @@ class TtsJob extends Equatable {
         errorMessage,
         operationName,
         storagePath,
+        localPath,
       ];
 }

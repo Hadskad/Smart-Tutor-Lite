@@ -17,6 +17,7 @@ import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/network/network_info.dart';
+import '../../../../core/services/audio_file_manager.dart';
 import '../../../../native_bridge/performance_bridge.dart';
 import '../../domain/entities/transcription.dart';
 import '../../domain/entities/transcription_job.dart';
@@ -44,6 +45,8 @@ const _kSilenceThresholdDb = -45.0;
 const _kSilenceTickTrigger = 6; // 3s at 500ms interval
 const _kAmplitudeSampleInterval = Duration(milliseconds: 500);
 const _kMaxQueueSize = 10; // Maximum number of queued transcription jobs
+const _kFailedJobRetentionDays =
+    7; // Days to keep failed jobs before auto-cleanup
 
 enum TranscriptionExecutionMode { online, offline }
 
@@ -79,6 +82,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     this._requestNoteRetry,
     this._preferencesRepository,
     this._queueLocalDataSource,
+    this._audioFileManager,
   ) : super(const TranscriptionInitial()) {
     on<LoadTranscriptions>(_onLoad);
     on<LoadTranscriptionPreferences>(_onLoadPreferences);
@@ -107,6 +111,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     on<QueueJobRetried>(_onQueueJobRetried);
     on<LoadQueue>(_onLoadQueue);
     on<ResumeProcessingAfterPause>(_onResumeProcessingAfterPause);
+    on<NetworkConnectivityChanged>(_onNetworkConnectivityChanged);
 
     add(const LoadTranscriptionPreferences());
     add(const LoadQueue());
@@ -126,6 +131,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
   final RequestNoteRetry _requestNoteRetry;
   final TranscriptionPreferencesRepository _preferencesRepository;
   final TranscriptionQueueLocalDataSource _queueLocalDataSource;
+  final AudioFileManager _audioFileManager;
   final AudioRecorder _recorder = AudioRecorder();
   final Uuid _uuid = const Uuid();
   String? _currentRecordingPath;
@@ -136,7 +142,9 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
   Timer? _recordingTicker;
   StreamSubscription<Amplitude>? _amplitudeSubscription;
   StreamSubscription<Either<Failure, TranscriptionJob>>? _cloudJobSubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _activeCloudJobId;
+  bool _wasConnectedDuringProcessing = true;
   TranscriptionPreferences _preferences = const TranscriptionPreferences();
   TranscriptionExecutionMode _plannedExecutionMode =
       TranscriptionExecutionMode.online;
@@ -151,6 +159,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
   bool _isSpeedTestRunning = false;
   DateTime? _lastSpeedUpdate;
   bool _shouldMonitorSpeed = false; // Track if monitoring should be active
+  bool _isQueueProcessingLocked = false; // Mutex for queue processing
 
   Future<void> _onLoad(
     LoadTranscriptions event,
@@ -281,6 +290,9 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         _emitStateWithUpdatedQueue(emit, validatedQueue);
         // Save validated queue back
         await _queueLocalDataSource.saveQueue(validatedQueue);
+
+        // Cleanup old failed jobs
+        await _cleanupOldFailedJobs(emit);
 
         // Try to process next job if queue has waiting jobs
         await _processNextQueuedJob(emit);
@@ -517,6 +529,60 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     debugPrint('[SpeedTest] Monitoring stopped');
   }
 
+  void _startNetworkMonitoring() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription =
+        _networkInfo.onConnectivityChanged.listen((results) {
+      final isConnected =
+          results.isNotEmpty && !results.contains(ConnectivityResult.none);
+      final connectionType =
+          results.isNotEmpty ? results.first : ConnectivityResult.none;
+      add(NetworkConnectivityChanged(
+        isConnected: isConnected,
+        connectionType: connectionType,
+      ));
+    });
+    debugPrint('[NetworkMonitor] Started monitoring connectivity');
+  }
+
+  void _stopNetworkMonitoring() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
+    debugPrint('[NetworkMonitor] Stopped monitoring connectivity');
+  }
+
+  Future<void> _onNetworkConnectivityChanged(
+    NetworkConnectivityChanged event,
+    Emitter<TranscriptionState> emit,
+  ) async {
+    final wasConnected = _wasConnectedDuringProcessing;
+    _wasConnectedDuringProcessing = event.isConnected;
+
+    // Only relevant when we have an active cloud job
+    if (_activeCloudJobId == null) {
+      return;
+    }
+
+    if (!event.isConnected && wasConnected) {
+      // Network lost during processing
+      debugPrint('[NetworkMonitor] Network lost during cloud job processing');
+      _emitNotice(
+        emit,
+        'Network connection lost. Your transcription will resume when reconnected.',
+        severity: TranscriptionNoticeSeverity.warning,
+      );
+    } else if (event.isConnected && !wasConnected) {
+      // Network restored
+      debugPrint(
+          '[NetworkMonitor] Network restored during cloud job processing');
+      _emitNotice(
+        emit,
+        'Network connection restored. Processing will continue.',
+        severity: TranscriptionNoticeSeverity.info,
+      );
+    }
+  }
+
   Future<void> _runSpeedTest() async {
     if (ApiConstants.speedTestFileUrl.isEmpty) {
       return;
@@ -580,6 +646,41 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     _pendingFallbackAudioPath = null;
     _pendingFallbackDuration = null;
     _pendingFallbackSizeBytes = null;
+  }
+
+  /// Gets fallback context from a queued job, falling back to bloc variables.
+  /// This ensures context is preserved even when multiple jobs are processed.
+  ({String audioPath, Duration duration, int fileSizeBytes})?
+      _getFallbackContextForJob(String? audioPath) {
+    if (audioPath == null) {
+      // No audio path - use bloc-level fallback
+      final path = _pendingFallbackAudioPath;
+      final duration = _pendingFallbackDuration;
+      final size = _pendingFallbackSizeBytes;
+      if (path == null || duration == null || size == null) {
+        return null;
+      }
+      return (audioPath: path, duration: duration, fileSizeBytes: size);
+    }
+
+    // Try to find job in queue for context
+    final job = _findQueuedJobByAudioPath(audioPath);
+    if (job != null) {
+      return (
+        audioPath: job.audioPath,
+        duration: job.duration ?? Duration.zero,
+        fileSizeBytes: job.fileSizeBytes ?? 0,
+      );
+    }
+
+    // Fallback to bloc-level context
+    final path = _pendingFallbackAudioPath;
+    final duration = _pendingFallbackDuration;
+    final size = _pendingFallbackSizeBytes;
+    if (path == null || duration == null || size == null) {
+      return null;
+    }
+    return (audioPath: path, duration: duration, fileSizeBytes: size);
   }
 
   void _startOfflineTranscription(String audioPath) {
@@ -672,6 +773,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       _currentRecordingPath = filePath;
       _lastRecordedFilePath = filePath;
       _recordingStartedAt = DateTime.now();
+      // Register the recording with AudioFileManager
+      await _audioFileManager.registerRecording(filePath);
       _isInputTooLow = false;
       _silenceTicks = 0;
       _startRecordingTicker();
@@ -795,6 +898,9 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
         duration: duration,
         fileSizeBytes: fileSizeBytes,
       );
+
+      // Mark file as pending process
+      await _audioFileManager.markPendingProcess(audioPath);
 
       // Check if processing is currently active
       final isProcessingActive =
@@ -1109,7 +1215,9 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       (job) {
         _lastCloudFailureMessage = null;
         _activeCloudJobId = job.id;
+        _wasConnectedDuringProcessing = true;
         _listenToCloudJob(job.id);
+        _startNetworkMonitoring();
         emit(
           CloudTranscriptionState(
             job: job,
@@ -1182,12 +1290,17 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     _activeCloudJobId = null;
     await _cloudJobSubscription?.cancel();
     _cloudJobSubscription = null;
+    _stopNetworkMonitoring();
 
-    // Check if this is a queued job
-    final audioPath = _pendingFallbackAudioPath;
+    // Check if this is a queued job - try to find by audio path from fallback context
+    // or from the job's localAudioPath
+    final audioPath = _pendingFallbackAudioPath ?? job.localAudioPath;
     final queuedJob =
         audioPath != null ? _findQueuedJobByAudioPath(audioPath) : null;
     final isQueuedJob = queuedJob != null;
+
+    // Get fallback context - prefer queued job data over bloc variables
+    final fallbackCtx = _getFallbackContextForJob(audioPath);
 
     if (job.status == TranscriptionJobStatus.completed &&
         job.transcriptId != null) {
@@ -1223,10 +1336,9 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           // Check if note generation failed
           if (job.noteStatus == 'error') {
             // Update transcription to mark as failed (note generation failure)
-            // ✅ FIX: Use local audio path from fallback context instead of transcription.audioPath
-            // The transcription.audioPath from cloud may be incorrect (basename or storage path)
+            // Use fallback context (from queued job or bloc variables) for correct local path
             final correctAudioPath =
-                _pendingFallbackAudioPath ?? transcription.audioPath;
+                fallbackCtx?.audioPath ?? transcription.audioPath;
 
             final failedTranscription = Transcription(
               id: transcription.id,
@@ -1242,7 +1354,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
               failureType: 'note_generation',
               errorMessage: job.noteError ?? 'Note generation failed',
               originalJobId: job.id,
-              fileSizeBytes: _pendingFallbackSizeBytes ??
+              fileSizeBytes: fallbackCtx?.fileSizeBytes ??
                   transcription.metadata['file_size_bytes'] as int?,
             );
 
@@ -1351,16 +1463,15 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
           ),
         );
       } else {
-        // Save failed transcription to history
-        final audioPath = _pendingFallbackAudioPath;
-        if (audioPath != null) {
+        // Save failed transcription to history using fallback context
+        if (fallbackCtx != null) {
           final failedTranscription = await _createFailedTranscription(
-            audioPath: audioPath,
+            audioPath: fallbackCtx.audioPath,
             failureType: 'transcription',
             errorMessage: _lastCloudFailureMessage!,
             originalJobId: job.id,
-            duration: _pendingFallbackDuration,
-            fileSizeBytes: _pendingFallbackSizeBytes,
+            duration: fallbackCtx.duration,
+            fileSizeBytes: fallbackCtx.fileSizeBytes,
           );
 
           if (failedTranscription != null) {
@@ -1882,16 +1993,15 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     if (path == null) {
       return;
     }
-    final file = File(path);
-    if (await file.exists()) {
-      try {
-        await file.delete();
-      } catch (_) {
-        // Best-effort cleanup.
-      }
+    // Use AudioFileManager for safe deletion
+    final deleted = await _audioFileManager.deleteIfAllowed(path);
+    if (deleted) {
+      _lastRecordedFilePath = null;
+      _clearFallbackContext();
+    } else {
+      debugPrint(
+          '[TranscriptionBloc] File not deleted - may be retained for retry: $path');
     }
-    _lastRecordedFilePath = null;
-    _clearFallbackContext();
   }
 
   void _emitNotice(
@@ -1912,13 +2022,36 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
   }
 
   Future<void> _processNextQueuedJob(Emitter<TranscriptionState> emit) async {
+    // Mutex: prevent concurrent queue processing
+    if (_isQueueProcessingLocked) {
+      debugPrint('[Queue] Processing locked, skipping');
+      return;
+    }
+
     // Check if processing is already active
     final isProcessingActive =
         _activeCloudJobId != null || state is TranscriptionProcessing;
     if (isProcessingActive) {
+      debugPrint('[Queue] Processing already active, skipping');
       return;
     }
 
+    // Acquire lock
+    _isQueueProcessingLocked = true;
+    debugPrint('[Queue] Lock acquired for processing');
+
+    try {
+      await _processNextQueuedJobLocked(emit);
+    } finally {
+      // Release lock
+      _isQueueProcessingLocked = false;
+      debugPrint('[Queue] Lock released');
+    }
+  }
+
+  /// Internal method that processes the next job while lock is held.
+  Future<void> _processNextQueuedJobLocked(
+      Emitter<TranscriptionState> emit) async {
     // Find first waiting job
     final currentQueue = state.queue;
     QueuedTranscriptionJob waitingJob;
@@ -1973,6 +2106,10 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       duration: duration,
       fileSizeBytes: fileSizeBytes,
     );
+
+    // Mark file as processing
+    await _audioFileManager.markProcessing(waitingJob.audioPath,
+        jobId: waitingJob.id);
 
     // Process based on mode
     final useOnline = waitingJob.isOnlineMode ?? true;
@@ -2031,6 +2168,43 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       debugPrint('[Queue] Failed to save queue: $e');
       // Best-effort save - don't throw
     }
+  }
+
+  /// Cleanup old failed jobs from the queue.
+  /// Returns the number of jobs cleaned up.
+  Future<int> _cleanupOldFailedJobs(Emitter<TranscriptionState> emit) async {
+    final now = DateTime.now();
+    final threshold = Duration(days: _kFailedJobRetentionDays);
+    final currentQueue = List<QueuedTranscriptionJob>.from(state.queue);
+    final toRemove = <String>[];
+
+    for (final job in currentQueue) {
+      // Only clean up failed jobs
+      if (job.status != QueuedTranscriptionJobStatus.failed) {
+        continue;
+      }
+
+      final age = now.difference(job.updatedAt ?? job.createdAt);
+      if (age > threshold) {
+        toRemove.add(job.id);
+        // Also cleanup the audio file
+        await _audioFileManager.forceDelete(job.audioPath);
+        debugPrint(
+            '[Queue] Auto-cleaned failed job ${job.id} (age: ${age.inDays} days)');
+      }
+    }
+
+    if (toRemove.isEmpty) {
+      return 0;
+    }
+
+    final updatedQueue =
+        currentQueue.where((job) => !toRemove.contains(job.id)).toList();
+    _emitStateWithUpdatedQueue(emit, updatedQueue);
+    await _saveQueue(updatedQueue);
+
+    debugPrint('[Queue] Auto-cleaned ${toRemove.length} old failed jobs');
+    return toRemove.length;
   }
 
   // Helper method to update queue in current state
@@ -2281,6 +2455,8 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     // Never delete files for waiting or failed jobs
     if (job.status == QueuedTranscriptionJobStatus.waiting ||
         job.status == QueuedTranscriptionJobStatus.failed) {
+      // Mark as retained for retry
+      await _audioFileManager.markRetainedForRetry(job.audioPath);
       return false;
     }
 
@@ -2291,13 +2467,26 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
 
     // For online mode: delete only when note generation is complete
     if (job.isOnlineMode == true) {
-      return noteStatus == 'ready';
+      if (noteStatus == 'ready') {
+        await _audioFileManager.markReadyForCleanup(job.audioPath,
+            noteId: job.noteId);
+        return true;
+      }
+      // Note not ready yet - retain for potential retry
+      await _audioFileManager.markRetainedForRetry(job.audioPath);
+      return false;
     }
 
     // For offline mode: delete when transcription succeeds
     // (transcription success means note is safely stored)
     if (job.isOnlineMode == false) {
-      return transcriptionSucceeded;
+      if (transcriptionSucceeded) {
+        await _audioFileManager.markReadyForCleanup(job.audioPath,
+            noteId: job.noteId);
+        return true;
+      }
+      await _audioFileManager.markRetainedForRetry(job.audioPath);
+      return false;
     }
 
     // Default: don't delete if we're unsure
@@ -2305,15 +2494,13 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
   }
 
   Future<void> _deleteFileForJob(String audioPath) async {
-    final file = File(audioPath);
-    if (await file.exists()) {
-      try {
-        await file.delete();
-        debugPrint('[Queue] Deleted audio file for successful job: $audioPath');
-      } catch (e) {
-        debugPrint('[Queue] Failed to delete audio file: $e');
-        // Best-effort cleanup - don't fail the job
-      }
+    // Use AudioFileManager for safe deletion
+    final deleted = await _audioFileManager.deleteIfAllowed(audioPath);
+    if (deleted) {
+      debugPrint('[Queue] Deleted audio file for successful job: $audioPath');
+    } else {
+      debugPrint(
+          '[Queue] File not deleted - may be retained for retry: $audioPath');
     }
   }
 
@@ -2337,6 +2524,10 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     _emitStateWithUpdatedQueue(emit, updatedQueue);
     await _saveQueue(updatedQueue);
 
+    // Mark audio file as retained for retry
+    await _audioFileManager.markRetainedForRetry(job.audioPath,
+        incrementRetry: 1);
+
     // Clear fallback context after processing to prevent stale data
     _clearFallbackContext();
 
@@ -2359,18 +2550,10 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       return;
     }
 
-    // Delete audio file for cancelled job to avoid orphaned temp files
-    try {
-      final file = File(job.audioPath);
-      if (await file.exists()) {
-        await file.delete();
-        debugPrint(
-            '[Queue] Deleted audio file for cancelled job: ${job.audioPath}');
-      }
-    } catch (e) {
-      debugPrint('[Queue] Failed to delete audio file for cancelled job: $e');
-      // Best-effort cleanup - continue with queue removal
-    }
+    // Delete audio file for cancelled job using AudioFileManager (force delete)
+    await _audioFileManager.forceDelete(job.audioPath);
+    debugPrint(
+        '[Queue] Force deleted audio file for cancelled job: ${job.audioPath}');
 
     // Remove from queue
     final updatedQueue = List<QueuedTranscriptionJob>.from(currentQueue)
@@ -2457,6 +2640,9 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     _emitStateWithUpdatedQueue(emit, updatedQueue);
     await _saveQueue(updatedQueue);
 
+    // Cleanup old failed jobs
+    await _cleanupOldFailedJobs(emit);
+
     // Resume processing
     await _processNextQueuedJob(emit);
   }
@@ -2506,6 +2692,13 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
       _cloudJobSubscription = null;
     }
 
+    // Run audio file cleanup in background
+    _audioFileManager.runFullCleanup().then((cleaned) {
+      if (cleaned > 0) {
+        debugPrint('[AudioFileManager] Cleaned $cleaned files on app resume');
+      }
+    });
+
     // Check for stuck processing jobs and trigger resume event
     final currentQueue = state.queue;
     final processingJobs = currentQueue
@@ -2531,6 +2724,7 @@ class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState>
     _stopRecordingTicker();
     _stopMonitoringInputLevels();
     _stopSpeedTestMonitoring();
+    _stopNetworkMonitoring();
     await _cloudJobSubscription?.cancel();
     if (await _recorder.isRecording()) {
       await _recorder.stop();

@@ -96,6 +96,56 @@ app.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// DELETE /tts/:id - Delete TTS job and associated audio file
+app.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // Get job document first to check for storagePath
+    const docRef = db.collection('tts_jobs').doc(id);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      res.status(404).json({ error: 'TTS job not found' });
+      return;
+    }
+
+    const jobData = doc.data();
+    
+    // Delete audio file from Firebase Storage if exists
+    if (jobData?.storagePath) {
+      try {
+        const bucket = admin.storage().bucket();
+        await bucket.file(jobData.storagePath).delete();
+        console.log(`[Job ${id}] Deleted audio file: ${jobData.storagePath}`);
+      } catch (storageError) {
+        // Log but don't fail if storage deletion fails
+        // File may have already been deleted or path may be invalid
+        console.warn(
+          `[Job ${id}] Failed to delete audio file from storage:`,
+          storageError,
+        );
+      }
+    }
+
+    // Delete the Firestore document
+    await docRef.delete();
+    console.log(`[Job ${id}] Deleted TTS job document`);
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'TTS job deleted successfully',
+      id,
+    });
+  } catch (error) {
+    console.error('Error in DELETE /tts/:id:', error);
+    res.status(500).json({
+      error: 'Failed to delete TTS job',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 /**
  * Check if an error is retryable (network errors, 5xx server errors, timeouts)
  */

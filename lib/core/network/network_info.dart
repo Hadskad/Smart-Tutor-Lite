@@ -7,6 +7,7 @@ import 'package:injectable/injectable.dart';
 abstract class NetworkInfo {
   Future<bool> get isConnected;
   Stream<bool> get onStatusChange;
+  Stream<List<ConnectivityResult>> get onConnectivityChanged;
   Future<ConnectivityResult> get connectionType;
   Future<double?> measureDownloadSpeedKbps({
     required String testFileUrl,
@@ -30,6 +31,10 @@ class NetworkInfoImpl implements NetworkInfo {
   @override
   Stream<bool> get onStatusChange =>
       _connectivity.onConnectivityChanged.map(_hasConnection);
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged =>
+      _connectivity.onConnectivityChanged.map(_normalizeResults);
 
   @override
   Future<ConnectivityResult> get connectionType async {

@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dartz/dartz.dart';
 import 'package:equatable/equatable.dart';
 
@@ -239,4 +240,17 @@ class LoadQueue extends TranscriptionEvent {
 
 class ResumeProcessingAfterPause extends TranscriptionEvent {
   const ResumeProcessingAfterPause();
+}
+
+class NetworkConnectivityChanged extends TranscriptionEvent {
+  const NetworkConnectivityChanged({
+    required this.isConnected,
+    required this.connectionType,
+  });
+
+  final bool isConnected;
+  final ConnectivityResult connectionType;
+
+  @override
+  List<Object?> get props => [isConnected, connectionType];
 }

@@ -53,3 +53,7 @@ class UpdateSummaryEvent extends SummaryEvent {
   List<Object?> get props => [summary];
 }
 
+/// Event to cancel an ongoing summarization operation
+class CancelSummarizationEvent extends SummaryEvent {
+  const CancelSummarizationEvent();
+}

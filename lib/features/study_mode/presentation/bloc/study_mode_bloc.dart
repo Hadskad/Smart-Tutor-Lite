@@ -3,6 +3,8 @@ import 'package:injectable/injectable.dart';
 
 import '../../../../core/utils/logger.dart';
 import '../../../../native_bridge/performance_bridge.dart';
+import '../../domain/entities/flashcard.dart';
+import '../../domain/entities/study_session.dart';
 import '../../domain/repositories/study_mode_repository.dart';
 import '../../domain/usecases/generate_flashcards.dart';
 import '../../domain/usecases/get_progress.dart';
@@ -11,7 +13,7 @@ import '../../domain/usecases/update_progress.dart';
 import '../bloc/study_mode_event.dart';
 import '../bloc/study_mode_state.dart';
 
-@injectable
+@lazySingleton
 class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
   StudyModeBloc(
     this._generateFlashcards,
@@ -30,8 +32,10 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
     on<MarkFlashcardUnknownEvent>(_onMarkFlashcardUnknown);
     on<EndStudySessionEvent>(_onEndStudySession);
     on<DeleteFlashcardEvent>(_onDeleteFlashcard);
+    on<DeleteFlashcardsBatchEvent>(_onDeleteFlashcardsBatch);
     on<LoadProgressEvent>(_onLoadProgress);
     on<FlipCardEvent>(_onFlipCard);
+    on<UndoLastActionEvent>(_onUndoLastAction);
   }
 
   final GenerateFlashcards _generateFlashcards;
@@ -43,7 +47,11 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
   final AppLogger _logger;
 
   StudyModeSessionActive? _currentSessionState;
+  List<Flashcard>? _sessionFlashcardsCache;
   bool _isGeneratingFlashcards = false;
+  
+  // Undo support: store history of session states
+  final List<_SessionHistoryEntry> _sessionHistory = [];
 
   Future<void> _onGenerateFlashcards(
     GenerateFlashcardsEvent event,
@@ -155,7 +163,7 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
             StudyModeError(failure.message ?? 'Failed to load flashcards'),
           ),
           (allFlashcards) {
-            final sessionFlashcards = allFlashcards
+            var sessionFlashcards = allFlashcards
                 .where((fc) => session.flashcardIds.contains(fc.id))
                 .toList();
 
@@ -163,6 +171,17 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
               emit(const StudyModeError('Flashcards not found'));
               return;
             }
+
+            // Shuffle if requested
+            if (event.shuffle) {
+              sessionFlashcards = List.from(sessionFlashcards)..shuffle();
+            }
+
+            // Cache the session flashcards to avoid repeated DB calls
+            _sessionFlashcardsCache = sessionFlashcards;
+            
+            // Clear history for new session
+            _sessionHistory.clear();
 
             final currentFlashcard = sessionFlashcards.first;
             _currentSessionState = StudyModeSessionActive(
@@ -243,6 +262,18 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
     final session = currentState.session;
     final nextIndex = currentState.currentFlashcardIndex + 1;
 
+    // Save history for undo (limit to last 5 actions)
+    _sessionHistory.add(_SessionHistoryEntry(
+      session: session,
+      flashcard: currentState.currentFlashcard,
+      flashcardId: currentState.currentFlashcard.id,
+      previousIndex: currentState.currentFlashcardIndex,
+      wasMarkedKnown: known,
+    ));
+    if (_sessionHistory.length > 5) {
+      _sessionHistory.removeAt(0);
+    }
+
     // Update session progress
     final updateResult = await _repository.updateStudySessionProgress(
       sessionId: session.id,
@@ -255,55 +286,62 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
       (failure) =>
           emit(StudyModeError(failure.message ?? 'Failed to update session')),
       (updatedSession) async {
+        // Use cached flashcards if available
+        final sessionFlashcards = _sessionFlashcardsCache;
+        
         if (nextIndex >= session.flashcardIds.length) {
           // Session completed
           final endResult = await _repository.endStudySession(session.id);
           endResult.fold(
             (failure) => emit(
                 StudyModeError(failure.message ?? 'Failed to end session')),
-            (completedSession) async {
-              // Load all flashcards for the completion view
-              final allFlashcardsResult = await _repository.getAllFlashcards();
-              allFlashcardsResult.fold(
-                (failure) => emit(StudyModeError(
-                    failure.message ?? 'Failed to load flashcards')),
-                (flashcards) {
-                  final sessionFlashcards = flashcards
-                      .where(
-                          (fc) => completedSession.flashcardIds.contains(fc.id))
-                      .toList();
-                  _currentSessionState = null;
-                  emit(StudyModeSessionCompleted(
-                    session: completedSession,
-                    flashcards: sessionFlashcards,
-                  ));
-                },
-              );
+            (completedSession) {
+              _currentSessionState = null;
+              _sessionFlashcardsCache = null; // Clear cache on session end
+              emit(StudyModeSessionCompleted(
+                session: completedSession,
+                flashcards: sessionFlashcards ?? [],
+              ));
             },
           );
         } else {
-          // Load next flashcard
-          final allFlashcardsResult = await _repository.getAllFlashcards();
-          allFlashcardsResult.fold(
-            (failure) => emit(
-                StudyModeError(failure.message ?? 'Failed to load flashcards')),
-            (allFlashcards) {
-              final sessionFlashcards = allFlashcards
-                  .where((fc) => updatedSession.flashcardIds.contains(fc.id))
-                  .toList();
+          // Get next flashcard from cache
+          if (sessionFlashcards != null && nextIndex < sessionFlashcards.length) {
+            final nextFlashcard = sessionFlashcards[nextIndex];
+            _currentSessionState = currentState.copyWith(
+              session: updatedSession,
+              currentFlashcardIndex: nextIndex,
+              currentFlashcard: nextFlashcard,
+              isFlipped: false,
+            );
+            emit(_currentSessionState!);
+          } else {
+            // Fallback: load from repository if cache is empty
+            final allFlashcardsResult = await _repository.getAllFlashcards();
+            allFlashcardsResult.fold(
+              (failure) => emit(
+                  StudyModeError(failure.message ?? 'Failed to load flashcards')),
+              (allFlashcards) {
+                final freshSessionFlashcards = allFlashcards
+                    .where((fc) => updatedSession.flashcardIds.contains(fc.id))
+                    .toList();
+                
+                // Update cache
+                _sessionFlashcardsCache = freshSessionFlashcards;
 
-              if (nextIndex < sessionFlashcards.length) {
-                final nextFlashcard = sessionFlashcards[nextIndex];
-                _currentSessionState = currentState.copyWith(
-                  session: updatedSession,
-                  currentFlashcardIndex: nextIndex,
-                  currentFlashcard: nextFlashcard,
-                  isFlipped: false,
-                );
-                emit(_currentSessionState!);
-              }
-            },
-          );
+                if (nextIndex < freshSessionFlashcards.length) {
+                  final nextFlashcard = freshSessionFlashcards[nextIndex];
+                  _currentSessionState = currentState.copyWith(
+                    session: updatedSession,
+                    currentFlashcardIndex: nextIndex,
+                    currentFlashcard: nextFlashcard,
+                    isFlipped: false,
+                  );
+                  emit(_currentSessionState!);
+                }
+              },
+            );
+          }
         }
       },
     );
@@ -360,6 +398,28 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
     );
   }
 
+  Future<void> _onDeleteFlashcardsBatch(
+    DeleteFlashcardsBatchEvent event,
+    Emitter<StudyModeState> emit,
+  ) async {
+    if (event.flashcardIds.isEmpty) {
+      return;
+    }
+
+    emit(const StudyModeLoading());
+
+    final result = await _repository.deleteFlashcards(event.flashcardIds);
+
+    result.fold(
+      (failure) =>
+          emit(StudyModeError(failure.message ?? 'Failed to delete flashcards')),
+      (_) async {
+        // Reload flashcards after batch deletion
+        add(const LoadFlashcardsEvent());
+      },
+    );
+  }
+
   Future<void> _onLoadProgress(
     LoadProgressEvent event,
     Emitter<StudyModeState> emit,
@@ -388,6 +448,49 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
     emit(_currentSessionState!);
   }
 
+  Future<void> _onUndoLastAction(
+    UndoLastActionEvent event,
+    Emitter<StudyModeState> emit,
+  ) async {
+    if (_sessionHistory.isEmpty) {
+      return;
+    }
+
+    final lastEntry = _sessionHistory.removeLast();
+    
+    // Revert the session progress in the repository
+    final revertResult = await _repository.updateStudySessionProgress(
+      sessionId: lastEntry.session.id,
+      cardsReviewed: lastEntry.session.cardsReviewed,
+      cardsKnown: lastEntry.session.cardsKnown,
+      cardsUnknown: lastEntry.session.cardsUnknown,
+    );
+
+    revertResult.fold(
+      (failure) => emit(StudyModeError(failure.message ?? 'Failed to undo')),
+      (revertedSession) {
+        // Revert the flashcard progress
+        _updateProgress(
+          flashcardId: lastEntry.flashcardId,
+          isKnown: !lastEntry.wasMarkedKnown, // Revert the isKnown state
+        );
+
+        // Restore the previous state
+        _currentSessionState = StudyModeSessionActive(
+          session: revertedSession,
+          currentFlashcardIndex: lastEntry.previousIndex,
+          currentFlashcard: lastEntry.flashcard,
+          isFlipped: false,
+        );
+
+        emit(_currentSessionState!);
+      },
+    );
+  }
+
+  /// Check if undo is available
+  bool get canUndo => _sessionHistory.isNotEmpty;
+
   Future<void> _logMetrics(String segmentId) async {
     final metrics = await _performanceBridge.endSegment(segmentId);
     _logger.info(
@@ -402,4 +505,21 @@ class StudyModeBloc extends Bloc<StudyModeEvent, StudyModeState> {
       },
     );
   }
+}
+
+/// Helper class to store session history for undo functionality
+class _SessionHistoryEntry {
+  const _SessionHistoryEntry({
+    required this.session,
+    required this.flashcard,
+    required this.flashcardId,
+    required this.previousIndex,
+    required this.wasMarkedKnown,
+  });
+
+  final StudySession session;
+  final Flashcard flashcard;
+  final String flashcardId;
+  final int previousIndex;
+  final bool wasMarkedKnown;
 }

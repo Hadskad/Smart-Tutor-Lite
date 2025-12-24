@@ -22,6 +22,8 @@ import 'package:shared_preferences/shared_preferences.dart' as _i460;
 import 'package:smart_tutor_lite/core/network/api_client.dart' as _i114;
 import 'package:smart_tutor_lite/core/network/network_info.dart' as _i440;
 import 'package:smart_tutor_lite/core/services/audio_converter.dart' as _i715;
+import 'package:smart_tutor_lite/core/services/audio_file_manager.dart'
+    as _i490;
 import 'package:smart_tutor_lite/core/sync/queue_sync_service.dart' as _i545;
 import 'package:smart_tutor_lite/core/utils/logger.dart' as _i496;
 import 'package:smart_tutor_lite/core/utils/performance_monitor.dart' as _i366;
@@ -39,6 +41,8 @@ import 'package:smart_tutor_lite/features/quiz/domain/usecases/submit_quiz.dart'
     as _i464;
 import 'package:smart_tutor_lite/features/quiz/presentation/bloc/quiz_bloc.dart'
     as _i256;
+import 'package:smart_tutor_lite/features/study_folders/data/datasources/folder_material_local_datasource.dart'
+    as _i216;
 import 'package:smart_tutor_lite/features/study_folders/data/datasources/study_folder_local_datasource.dart'
     as _i368;
 import 'package:smart_tutor_lite/features/study_folders/data/repositories/study_folder_repository_impl.dart'
@@ -165,6 +169,8 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i457.FirebaseStorage>(
         () => externalModule.firebaseStorage());
     gh.lazySingleton<_i99.PerformanceBridge>(() => _i99.PerformanceBridge());
+    gh.lazySingleton<_i490.AudioFileManager>(
+        () => _i490.AudioFileManager(gh<_i460.SharedPreferences>()));
     gh.lazySingleton<_i892.TranscriptionQueueLocalDataSource>(() =>
         _i892.TranscriptionQueueLocalDataSourceImpl(
             gh<_i460.SharedPreferences>()));
@@ -188,6 +194,8 @@ extension GetItInjectableX on _i174.GetIt {
               gh<_i974.FirebaseFirestore>(),
               gh<_i457.FirebaseStorage>(),
             ));
+    gh.lazySingleton<_i216.FolderMaterialLocalDataSource>(() =>
+        _i216.FolderMaterialLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i777.FlashcardLocalDataSource>(
         () => _i777.FlashcardLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i588.TranscriptionPreferencesRepository>(() =>
@@ -204,15 +212,18 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i38.SummaryQueueLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i756.WhisperLifecycleObserver>(
         () => _i756.WhisperLifecycleObserver(gh<_i687.WhisperFfi>()));
-    gh.lazySingleton<_i459.StudyFolderRepository>(() =>
-        _i15.StudyFolderRepositoryImpl(gh<_i368.StudyFolderLocalDataSource>()));
     gh.lazySingleton<_i361.Dio>(
         () => externalModule.dio(gh<_i496.AppLogger>()));
     gh.lazySingleton<_i440.NetworkInfo>(() => _i440.NetworkInfoImpl(
           gh<_i895.Connectivity>(),
           gh<_i361.Dio>(),
         ));
-    gh.factory<_i783.StudyFoldersBloc>(
+    gh.lazySingleton<_i459.StudyFolderRepository>(
+        () => _i15.StudyFolderRepositoryImpl(
+              gh<_i368.StudyFolderLocalDataSource>(),
+              gh<_i216.FolderMaterialLocalDataSource>(),
+            ));
+    gh.lazySingleton<_i783.StudyFoldersBloc>(
         () => _i783.StudyFoldersBloc(gh<_i459.StudyFolderRepository>()));
     gh.lazySingleton<_i80.TranscriptionJobRepository>(
         () => _i438.TranscriptionJobRepositoryImpl(
@@ -279,19 +290,6 @@ extension GetItInjectableX on _i174.GetIt {
           gh<_i90.TtsRepository>(),
           gh<_i496.AppLogger>(),
         ));
-    gh.lazySingleton<_i940.TranscriptionBloc>(() => _i940.TranscriptionBloc(
-          gh<_i978.TranscribeAudio>(),
-          gh<_i99.PerformanceBridge>(),
-          gh<_i861.TranscriptionRepository>(),
-          gh<_i440.NetworkInfo>(),
-          gh<_i925.CreateTranscriptionJob>(),
-          gh<_i1047.WatchTranscriptionJob>(),
-          gh<_i794.CancelTranscriptionJob>(),
-          gh<_i30.RequestTranscriptionJobRetry>(),
-          gh<_i14.RequestNoteRetry>(),
-          gh<_i588.TranscriptionPreferencesRepository>(),
-          gh<_i892.TranscriptionQueueLocalDataSource>(),
-        ));
     gh.lazySingleton<_i840.ConvertPdfToAudio>(
         () => _i840.ConvertPdfToAudio(gh<_i90.TtsRepository>()));
     gh.lazySingleton<_i93.ConvertTextToAudio>(
@@ -306,6 +304,26 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i889.GenerateQuiz(gh<_i291.QuizRepository>()));
     gh.lazySingleton<_i464.SubmitQuiz>(
         () => _i464.SubmitQuiz(gh<_i291.QuizRepository>()));
+    gh.lazySingleton<_i940.TranscriptionBloc>(() => _i940.TranscriptionBloc(
+          gh<_i978.TranscribeAudio>(),
+          gh<_i99.PerformanceBridge>(),
+          gh<_i861.TranscriptionRepository>(),
+          gh<_i440.NetworkInfo>(),
+          gh<_i925.CreateTranscriptionJob>(),
+          gh<_i1047.WatchTranscriptionJob>(),
+          gh<_i794.CancelTranscriptionJob>(),
+          gh<_i30.RequestTranscriptionJobRetry>(),
+          gh<_i14.RequestNoteRetry>(),
+          gh<_i588.TranscriptionPreferencesRepository>(),
+          gh<_i892.TranscriptionQueueLocalDataSource>(),
+          gh<_i490.AudioFileManager>(),
+        ));
+    gh.lazySingleton<_i942.TtsBloc>(() => _i942.TtsBloc(
+          gh<_i840.ConvertPdfToAudio>(),
+          gh<_i93.ConvertTextToAudio>(),
+          gh<_i90.TtsRepository>(),
+          gh<_i440.NetworkInfo>(),
+        ));
     gh.lazySingleton<_i380.GenerateFlashcards>(
         () => _i380.GenerateFlashcards(gh<_i835.StudyModeRepository>()));
     gh.lazySingleton<_i517.GetProgress>(
@@ -318,11 +336,6 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i447.SummarizePdf(gh<_i1069.SummaryRepository>()));
     gh.lazySingleton<_i613.SummarizeText>(
         () => _i613.SummarizeText(gh<_i1069.SummaryRepository>()));
-    gh.factory<_i942.TtsBloc>(() => _i942.TtsBloc(
-          gh<_i840.ConvertPdfToAudio>(),
-          gh<_i93.ConvertTextToAudio>(),
-          gh<_i90.TtsRepository>(),
-        ));
     gh.factory<_i256.QuizBloc>(() => _i256.QuizBloc(
           gh<_i889.GenerateQuiz>(),
           gh<_i464.SubmitQuiz>(),
@@ -337,7 +350,7 @@ extension GetItInjectableX on _i174.GetIt {
           gh<_i99.PerformanceBridge>(),
           gh<_i496.AppLogger>(),
         ));
-    gh.factory<_i111.StudyModeBloc>(() => _i111.StudyModeBloc(
+    gh.lazySingleton<_i111.StudyModeBloc>(() => _i111.StudyModeBloc(
           gh<_i380.GenerateFlashcards>(),
           gh<_i790.StartStudySession>(),
           gh<_i136.UpdateProgress>(),

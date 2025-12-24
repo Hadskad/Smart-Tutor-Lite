@@ -4,6 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../../../injection_container.dart';
+import '../../../quiz/presentation/bloc/quiz_bloc.dart';
+import '../../../quiz/presentation/bloc/quiz_event.dart';
+import '../../../quiz/presentation/bloc/quiz_state.dart';
+import '../../../quiz/presentation/pages/quiz_taking_page.dart';
 import '../../../study_mode/presentation/bloc/study_mode_bloc.dart';
 import '../../../study_mode/presentation/bloc/study_mode_event.dart';
 import '../../../study_mode/presentation/bloc/study_mode_state.dart';
@@ -35,7 +39,9 @@ class NoteDetailPage extends StatefulWidget {
 class _NoteDetailPageState extends State<NoteDetailPage> {
   late final StudyModeBloc _studyModeBloc;
   late final TranscriptionBloc _transcriptionBloc;
-  bool _isGenerating = false;
+  late final QuizBloc _quizBloc;
+  bool _isGeneratingFlashcards = false;
+  bool _isGeneratingQuiz = false;
   Transcription? _currentTranscription;
 
   @override
@@ -43,19 +49,40 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     super.initState();
     _studyModeBloc = getIt<StudyModeBloc>();
     _transcriptionBloc = getIt<TranscriptionBloc>();
+    _quizBloc = getIt<QuizBloc>();
     _currentTranscription = widget.transcription;
+  }
+
+  @override
+  void dispose() {
+    _quizBloc.close();
+    super.dispose();
   }
 
   void _generateFlashcards(BuildContext context) {
     final transcription = _currentTranscription ?? widget.transcription;
     setState(() {
-      _isGenerating = true;
+      _isGeneratingFlashcards = true;
     });
 
     _studyModeBloc.add(GenerateFlashcardsEvent(
       sourceId: transcription.id,
       sourceType: 'note',
       numFlashcards: 10,
+    ));
+  }
+
+  void _generateQuiz(BuildContext context) {
+    final transcription = _currentTranscription ?? widget.transcription;
+    setState(() {
+      _isGeneratingQuiz = true;
+    });
+
+    _quizBloc.add(GenerateQuizEvent(
+      sourceId: transcription.id,
+      sourceType: 'transcription',
+      numQuestions: 5,
+      difficulty: 'medium',
     ));
   }
 
@@ -147,6 +174,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
       providers: [
         BlocProvider.value(value: _studyModeBloc),
         BlocProvider.value(value: _transcriptionBloc),
+        BlocProvider.value(value: _quizBloc),
       ],
       child: BlocListener<TranscriptionBloc, TranscriptionState>(
         listener: (context, state) {
@@ -200,55 +228,105 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
             final isFormatting = transcriptionState.formattingTranscriptionId ==
                 (_currentTranscription?.id ?? widget.transcription.id);
             
-            return BlocListener<StudyModeBloc, StudyModeState>(
-        listener: (context, state) {
-          if (state is StudyModeFlashcardsLoaded) {
-            setState(() {
-              _isGenerating = false;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        '${state.flashcards.length} flashcards generated!',
-                      ),
+            return MultiBlocListener(
+        listeners: [
+          BlocListener<StudyModeBloc, StudyModeState>(
+            listener: (context, state) {
+              if (state is StudyModeFlashcardsLoaded) {
+                setState(() {
+                  _isGeneratingFlashcards = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.white),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            '${state.flashcards.length} flashcards generated!',
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                backgroundColor: Colors.green,
-                behavior: SnackBarBehavior.floating,
-                action: SnackBarAction(
-                  label: 'View',
-                  textColor: Colors.white,
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/study-mode');
-                  },
-                ),
-              ),
-            );
-          } else if (state is StudyModeError) {
-            setState(() {
-              _isGenerating = false;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(state.message)),
-                  ],
-                ),
-                backgroundColor: Colors.red,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        },
+                    backgroundColor: Colors.green,
+                    behavior: SnackBarBehavior.floating,
+                    action: SnackBarAction(
+                      label: 'View',
+                      textColor: Colors.white,
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/study-mode');
+                      },
+                    ),
+                  ),
+                );
+              } else if (state is StudyModeError) {
+                setState(() {
+                  _isGeneratingFlashcards = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.white),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(state.message)),
+                      ],
+                    ),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+          ),
+          BlocListener<QuizBloc, QuizState>(
+            listener: (context, state) {
+              if (state is QuizLoaded) {
+                setState(() {
+                  _isGeneratingQuiz = false;
+                });
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => BlocProvider.value(
+                      value: _quizBloc,
+                      child: QuizTakingPage(quiz: state.quiz),
+                    ),
+                  ),
+                );
+              } else if (state is QuizError) {
+                setState(() {
+                  _isGeneratingQuiz = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.white),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(state.message)),
+                      ],
+                    ),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } else if (state is QuizQueued) {
+                setState(() {
+                  _isGeneratingQuiz = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.message),
+                    backgroundColor: _kAccentBlue,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+          ),
+        ],
         child: Scaffold(
           backgroundColor: _kBackgroundColor,
           appBar: AppBar(
@@ -562,41 +640,68 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     
     // If no structured note, show Format button instead of Create Flashcards
     if (!hasStructuredNote) {
-      return Row(
+      return Column(
         children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.content_copy, size: 18),
-              label: const Text('Copy'),
-              onPressed: () => _copyToClipboard(context),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                foregroundColor: _kWhite,
-                side: const BorderSide(color: _kDarkGray),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.content_copy, size: 18),
+                  label: const Text('Copy'),
+                  onPressed: () => _copyToClipboard(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    foregroundColor: _kWhite,
+                    side: const BorderSide(color: _kDarkGray),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  icon: isFormatting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _kWhite,
+                          ),
+                        )
+                      : const Icon(Icons.auto_awesome, size: 18),
+                  label: Text(isFormatting ? 'Formatting...' : 'Format Note'),
+                  onPressed: isFormatting ? null : () => _formatNote(context),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: _kAccentBlue,
+                    foregroundColor: _kWhite,
+                    disabledBackgroundColor: _kAccentBlue.withOpacity(0.5),
+                    disabledForegroundColor: _kWhite.withOpacity(0.7),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: FilledButton.icon(
-              icon: isFormatting
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: _isGeneratingQuiz
                   ? const SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: _kWhite,
+                        color: _kAccentBlue,
                       ),
                     )
-                  : const Icon(Icons.auto_awesome, size: 18),
-              label: Text(isFormatting ? 'Formatting...' : 'Format this note'),
-              onPressed: isFormatting ? null : () => _formatNote(context),
-              style: FilledButton.styleFrom(
+                  : const Icon(Icons.quiz_outlined, size: 18),
+              label: Text(_isGeneratingQuiz ? 'Generating Quiz...' : 'Generate Quiz'),
+              onPressed: _isGeneratingQuiz ? null : () => _generateQuiz(context),
+              style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                backgroundColor: _kAccentBlue,
-                foregroundColor: _kWhite,
-                disabledBackgroundColor: _kAccentBlue.withOpacity(0.5),
-                disabledForegroundColor: _kWhite.withOpacity(0.7),
+                foregroundColor: _kAccentBlue,
+                side: const BorderSide(color: _kAccentBlue),
               ),
             ),
           ),
@@ -604,42 +709,69 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
       );
     }
 
-    // If structured note exists, show Copy and Create Flashcards buttons
-    return Row(
+    // If structured note exists, show Copy, Create Flashcards, and Quiz buttons
+    return Column(
       children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.content_copy, size: 18),
-            label: const Text('Copy'),
-            onPressed: () => _copyToClipboard(context),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              foregroundColor: _kWhite,
-              side: const BorderSide(color: _kDarkGray),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.content_copy, size: 18),
+                label: const Text('Copy'),
+                onPressed: () => _copyToClipboard(context),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  foregroundColor: _kWhite,
+                  side: const BorderSide(color: _kDarkGray),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                icon: _isGeneratingFlashcards
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _kWhite,
+                        ),
+                      )
+                    : const Icon(Icons.style_outlined, size: 18),
+                label: Text(_isGeneratingFlashcards ? 'Generating...' : 'Flashcards'),
+                onPressed: _isGeneratingFlashcards ? null : () => _generateFlashcards(context),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  backgroundColor: _kAccentBlue,
+                  foregroundColor: _kWhite,
+                  disabledBackgroundColor: _kAccentBlue.withOpacity(0.5),
+                  disabledForegroundColor: _kWhite.withOpacity(0.7),
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: FilledButton.icon(
-            icon: _isGenerating
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            icon: _isGeneratingQuiz
                 ? const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: _kWhite,
+                      color: _kAccentBlue,
                     ),
                   )
-                : const Icon(Icons.style_outlined, size: 18),
-            label: Text(_isGenerating ? 'Generating...' : 'Create Flashcards'),
-            onPressed: _isGenerating ? null : () => _generateFlashcards(context),
-            style: FilledButton.styleFrom(
+                : const Icon(Icons.quiz_outlined, size: 18),
+            label: Text(_isGeneratingQuiz ? 'Generating Quiz...' : 'Generate Quiz'),
+            onPressed: _isGeneratingQuiz ? null : () => _generateQuiz(context),
+            style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              backgroundColor: _kAccentBlue,
-              foregroundColor: _kWhite,
-              disabledBackgroundColor: _kAccentBlue.withOpacity(0.5),
-              disabledForegroundColor: _kWhite.withOpacity(0.7),
+              foregroundColor: _kAccentBlue,
+              side: const BorderSide(color: _kAccentBlue),
             ),
           ),
         ),

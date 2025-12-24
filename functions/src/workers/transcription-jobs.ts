@@ -24,7 +24,8 @@ import {
   SonioxErrorCode,
   transcribeWithSoniox,
 } from '../utils/soniox-helpers';
-import { generateStudyNotes } from '../utils/openai-helpers';
+import { generateStudyNotes as generateStudyNotesGPT } from '../utils/openai-helpers';
+import { generateStudyNotes as generateStudyNotesGemini } from '../utils/gemini-helpers';
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -43,6 +44,108 @@ const NOTE_STATUS = {
   ready: 'ready',
   error: 'error',
 } as const;
+
+const MAX_NOTE_RETRIES = 3;
+
+interface NoteGenerationResult {
+  note: Awaited<ReturnType<typeof generateStudyNotesGPT>>;
+  model: 'gpt' | 'gemini';
+  attempts: number;
+}
+
+/**
+ * Generate study notes with resilient fallback strategy:
+ * 1. Try GPT first with MAX_NOTE_RETRIES attempts
+ * 2. If GPT fails, try Gemini as fallback with MAX_NOTE_RETRIES attempts
+ * 3. Only throw if both providers fail
+ */
+async function generateStudyNotesWithFallback(
+  transcriptText: string,
+  jobId: string,
+): Promise<NoteGenerationResult> {
+  let gptAttempts = 0;
+  let lastGptError: Error | null = null;
+
+  // Try GPT first with retries
+  for (let i = 0; i < MAX_NOTE_RETRIES; i++) {
+    gptAttempts++;
+    try {
+      functions.logger.info('Attempting GPT note generation', {
+        jobId,
+        attempt: gptAttempts,
+        maxAttempts: MAX_NOTE_RETRIES,
+      });
+      const note = await generateStudyNotesGPT(transcriptText);
+      return { note, model: 'gpt', attempts: gptAttempts };
+    } catch (error) {
+      lastGptError = error instanceof Error ? error : new Error(String(error));
+      functions.logger.warn('GPT note generation attempt failed', {
+        jobId,
+        attempt: gptAttempts,
+        error: lastGptError.message,
+      });
+      // Wait briefly before retry (exponential backoff)
+      if (i < MAX_NOTE_RETRIES - 1) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.pow(2, i) * 1000),
+        );
+      }
+    }
+  }
+
+  // GPT failed all attempts, try Gemini as fallback
+  functions.logger.info('GPT exhausted retries, falling back to Gemini', {
+    jobId,
+    gptAttempts,
+    gptError: lastGptError?.message,
+  });
+
+  let geminiAttempts = 0;
+  let lastGeminiError: Error | null = null;
+
+  for (let i = 0; i < MAX_NOTE_RETRIES; i++) {
+    geminiAttempts++;
+    try {
+      functions.logger.info('Attempting Gemini note generation', {
+        jobId,
+        attempt: geminiAttempts,
+        maxAttempts: MAX_NOTE_RETRIES,
+      });
+      const note = await generateStudyNotesGemini(transcriptText);
+      return {
+        note,
+        model: 'gemini',
+        attempts: gptAttempts + geminiAttempts,
+      };
+    } catch (error) {
+      lastGeminiError =
+        error instanceof Error ? error : new Error(String(error));
+      functions.logger.warn('Gemini note generation attempt failed', {
+        jobId,
+        attempt: geminiAttempts,
+        error: lastGeminiError.message,
+      });
+      // Wait briefly before retry (exponential backoff)
+      if (i < MAX_NOTE_RETRIES - 1) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.pow(2, i) * 1000),
+        );
+      }
+    }
+  }
+
+  // Both providers failed
+  const totalAttempts = gptAttempts + geminiAttempts;
+  const errorMessage = `Note generation failed after ${totalAttempts} total attempts. GPT: ${lastGptError?.message || 'N/A'}. Gemini: ${lastGeminiError?.message || 'N/A'}`;
+  functions.logger.error('Both note generation providers failed', {
+    jobId,
+    gptAttempts,
+    geminiAttempts,
+    gptError: lastGptError?.message,
+    geminiError: lastGeminiError?.message,
+  });
+  throw new Error(errorMessage);
+}
 
 export const processTranscriptionJob = functions
   .region(REGION)
@@ -397,6 +500,7 @@ async function runNoteStage(
   transcriptId: string,
   transcriptText: string,
 ) {
+  const jobId = doc.id;
   try {
     await doc.ref.update({
       status: 'generating_note',
@@ -404,7 +508,17 @@ async function runNoteStage(
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    const studyNote = await generateStudyNotes(transcriptText);
+    // Use resilient note generation with GPT -> Gemini fallback and 3x retries
+    const { note: studyNote, model, attempts } =
+      await generateStudyNotesWithFallback(transcriptText, jobId);
+
+    functions.logger.info('Note generation succeeded', {
+      jobId,
+      model,
+      attempts,
+      transcriptId,
+    });
+
     const noteId = uuidv4();
     await saveStudyNote({
       id: noteId,
@@ -415,8 +529,9 @@ async function runNoteStage(
       actionItems: studyNote.actionItems,
       studyQuestions: studyNote.studyQuestions,
       metadata: {
-        jobId: doc.id,
-        model: 'gpt-4.1-mini',
+        jobId,
+        model,
+        attempts,
       },
     });
 
@@ -446,9 +561,9 @@ async function runNoteStage(
     });
     const normalized = normalizeError(error);
     const jobData = doc.data() as JobData;
-    functions.logger.error('Note generation failed', {
-      jobId: doc.id,
-      transcriptId: transcriptId,
+    functions.logger.error('Note generation failed (all providers exhausted)', {
+      jobId,
+      transcriptId,
       errorCode: normalized.code,
       errorMessage: normalized.message,
       canRetry: normalized.canRetry,

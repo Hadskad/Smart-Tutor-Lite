@@ -12,6 +12,7 @@ import '../../../transcription/domain/entities/transcription.dart';
 import '../bloc/tts_bloc.dart';
 import '../bloc/tts_event.dart';
 import '../bloc/tts_state.dart';
+import '../widgets/audio_player_widget.dart';
 import '../widgets/note_picker_sheet.dart';
 
 // --- Local Color Palette for TTS Page ---
@@ -39,6 +40,7 @@ class _TtsPageState extends State<TtsPage> {
   late final TtsBloc _bloc;
   String? _uploadedPdfUrl;
   bool _isUploadingPdf = false;
+  double _uploadProgress = 0.0;
   String _selectedVoice = 'en-US-Neural2-D'; // Neural2-D (default)
   TtsSource _selectedSource = TtsSource.pdf;
   Transcription? _selectedTranscription;
@@ -65,12 +67,15 @@ class _TtsPageState extends State<TtsPage> {
 
   @override
   void dispose() {
-    _bloc.close();
+    // Don't close the bloc - it's a lazySingleton managed by GetIt
     super.dispose();
   }
 
   Future<void> _pickAndUploadPdf() async {
-    setState(() => _isUploadingPdf = true);
+    setState(() {
+      _isUploadingPdf = true;
+      _uploadProgress = 0.0;
+    });
 
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -80,32 +85,72 @@ class _TtsPageState extends State<TtsPage> {
 
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
+        
+        // Check file size (max 25MB)
+        final fileSize = await file.length();
+        const maxSize = 25 * 1024 * 1024; // 25MB
+        if (fileSize > maxSize) {
+          setState(() {
+            _isUploadingPdf = false;
+            _uploadProgress = 0.0;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('PDF too large. Maximum size is 25MB.'),
+                backgroundColor: _kAccentCoral,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
+        
         final fileName = 'tts/${DateTime.now().millisecondsSinceEpoch}.pdf';
 
-        // Upload to Firebase Storage
+        // Upload to Firebase Storage with progress tracking
         final storageRef = FirebaseStorage.instance.ref().child(fileName);
-        await storageRef.putFile(file);
+        final uploadTask = storageRef.putFile(file);
+        
+        // Listen to progress updates
+        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+          if (mounted) {
+            setState(() {
+              _uploadProgress = snapshot.bytesTransferred / snapshot.totalBytes;
+            });
+          }
+        });
+        
+        // Wait for upload to complete
+        await uploadTask;
         final downloadUrl = await storageRef.getDownloadURL();
 
         setState(() {
           _uploadedPdfUrl = downloadUrl;
           _isUploadingPdf = false;
+          _uploadProgress = 0.0;
         });
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('PDF uploaded successfully'),
+            const SnackBar(
+              content: Text('PDF uploaded successfully'),
               backgroundColor: _kAccentBlue,
               behavior: SnackBarBehavior.floating,
             ),
           );
         }
       } else {
-        setState(() => _isUploadingPdf = false);
+        setState(() {
+          _isUploadingPdf = false;
+          _uploadProgress = 0.0;
+        });
       }
     } catch (e) {
-      setState(() => _isUploadingPdf = false);
+      setState(() {
+        _isUploadingPdf = false;
+        _uploadProgress = 0.0;
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -138,8 +183,8 @@ class _TtsPageState extends State<TtsPage> {
     final note = _selectedTranscription;
     if (note == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please select a note first'),
+        const SnackBar(
+          content: Text('Please select a note first'),
           backgroundColor: _kAccentCoral,
           behavior: SnackBarBehavior.floating,
         ),
@@ -147,10 +192,13 @@ class _TtsPageState extends State<TtsPage> {
       return;
     }
 
-    if (note.text == null || note.text!.trim().isEmpty) {
+    // Format the note for TTS
+    final formattedText = _formatNoteForTts(note);
+    
+    if (formattedText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Selected note has no text to convert'),
+        const SnackBar(
+          content: Text('Selected note has no text to convert'),
           backgroundColor: _kAccentCoral,
           behavior: SnackBarBehavior.floating,
         ),
@@ -160,10 +208,76 @@ class _TtsPageState extends State<TtsPage> {
 
     _bloc.add(
       ConvertTextToAudioEvent(
-        text: note.text!,
+        text: formattedText,
         voice: _selectedVoice,
       ),
     );
+  }
+
+  /// Formats a note for TTS, prioritizing structured content
+  String _formatNoteForTts(Transcription note) {
+    final buffer = StringBuffer();
+    
+    // Add title if available
+    if (note.title != null && note.title!.isNotEmpty) {
+      buffer.writeln('Title: ${note.title}');
+      buffer.writeln();
+    }
+    
+    // Check for structured note content
+    final structured = note.structuredNote;
+    if (structured != null && structured.isNotEmpty) {
+      // Summary
+      if (structured['summary'] != null && 
+          structured['summary'].toString().trim().isNotEmpty) {
+        buffer.writeln('Summary:');
+        buffer.writeln(structured['summary']);
+        buffer.writeln();
+      }
+      
+      // Key Points
+      if (structured['key_points'] != null) {
+        final keyPoints = structured['key_points'];
+        if (keyPoints is List && keyPoints.isNotEmpty) {
+          buffer.writeln('Key Points:');
+          for (var i = 0; i < keyPoints.length; i++) {
+            buffer.writeln('${i + 1}. ${keyPoints[i]}');
+          }
+          buffer.writeln();
+        }
+      }
+      
+      // Action Items
+      if (structured['action_items'] != null) {
+        final actionItems = structured['action_items'];
+        if (actionItems is List && actionItems.isNotEmpty) {
+          buffer.writeln('Action Items:');
+          for (var i = 0; i < actionItems.length; i++) {
+            buffer.writeln('${i + 1}. ${actionItems[i]}');
+          }
+          buffer.writeln();
+        }
+      }
+      
+      // Study Questions
+      if (structured['study_questions'] != null) {
+        final questions = structured['study_questions'];
+        if (questions is List && questions.isNotEmpty) {
+          buffer.writeln('Study Questions:');
+          for (var i = 0; i < questions.length; i++) {
+            buffer.writeln('Question ${i + 1}: ${questions[i]}');
+          }
+          buffer.writeln();
+        }
+      }
+    }
+    
+    // If no structured content, fall back to raw text
+    if (buffer.isEmpty && note.text != null && note.text!.trim().isNotEmpty) {
+      buffer.write(note.text);
+    }
+    
+    return buffer.toString().trim();
   }
 
   @override
@@ -375,27 +489,48 @@ class _TtsPageState extends State<TtsPage> {
                 ),
               )
             else if (_selectedSource == TtsSource.pdf)
-              OutlinedButton.icon(
-                onPressed: _isUploadingPdf ? null : _pickAndUploadPdf,
-                icon: _isUploadingPdf
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: _kAccentBlue,
-                        ),
-                      )
-                    : const Icon(Icons.upload_file),
-                label: Text(_isUploadingPdf ? 'Uploading...' : 'Upload PDF'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: _kAccentBlue, width: 1.5),
-                  foregroundColor: _kAccentBlue,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _isUploadingPdf ? null : _pickAndUploadPdf,
+                    icon: _isUploadingPdf
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _kAccentBlue,
+                            ),
+                          )
+                        : const Icon(Icons.upload_file),
+                    label: Text(
+                      _isUploadingPdf
+                          ? 'Uploading... ${(_uploadProgress * 100).toInt()}%'
+                          : 'Upload PDF',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: _kAccentBlue, width: 1.5),
+                      foregroundColor: _kAccentBlue,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
-                ),
+                  if (_isUploadingPdf) ...[
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: _uploadProgress,
+                        backgroundColor: _kDarkGray,
+                        valueColor: const AlwaysStoppedAnimation<Color>(_kAccentBlue),
+                        minHeight: 4,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             if (_selectedSource == TtsSource.note)
               Column(
@@ -504,21 +639,83 @@ class _TtsPageState extends State<TtsPage> {
                 elevation:
                     (state is TtsProcessing || _uploadedPdfUrl == null) ? 0 : 4,
               ),
-              child: Text(
-                _selectedSource == TtsSource.pdf
-                    ? 'Convert PDF to Audio Note'
-                    : 'Convert Note to Audio',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: _kWhite,
+              child: state is TtsProcessing
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _kWhite,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          state.statusMessage ?? 'Processing...',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: _kWhite,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Text(
+                      _selectedSource == TtsSource.pdf
+                          ? 'Convert PDF to Audio Note'
+                          : 'Convert Note to Audio',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: _kWhite,
+                      ),
+                    ),
+            ),
+            // Show estimated time during processing
+            if (state is TtsProcessing && state.estimatedSeconds != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _kAccentBlue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _kAccentBlue.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.access_time, color: _kAccentBlue, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Estimated time: ${_formatEstimatedTime(state.estimatedSeconds!)}',
+                      style: const TextStyle(
+                        color: _kAccentBlue,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  String _formatEstimatedTime(int seconds) {
+    if (seconds < 60) {
+      return '$seconds seconds';
+    }
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    if (remainingSeconds == 0) {
+      return '$minutes minute${minutes > 1 ? 's' : ''}';
+    }
+    return '$minutes min ${remainingSeconds}s';
   }
 
   bool _isConvertDisabled(TtsState state) {
@@ -578,7 +775,10 @@ class _TtsPageState extends State<TtsPage> {
               if (state.job.status == 'completed' &&
                   state.job.audioUrl.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                _buildAudioPlayer(state.job.audioUrl, state),
+                _buildAudioPlayer(
+                  state.job.audioUrl,
+                  localPath: state.job.localPath,
+                ),
               ],
             ],
           ),
@@ -655,74 +855,108 @@ class _TtsPageState extends State<TtsPage> {
   }
 
   Widget _buildJobCard(TtsJob job, TtsState state) {
+    final isFailed = job.status == 'failed';
+    
     return Container(
       decoration: BoxDecoration(
         color: _kCardColor,
         borderRadius: BorderRadius.circular(16.0),
+        border: isFailed
+            ? Border.all(color: _kAccentCoral.withOpacity(0.3), width: 1)
+            : null,
       ),
-      child: ListTile(
-        leading: Icon(
-          _getStatusIcon(job.status),
-          color: _getStatusColor(job.status),
-        ),
-        title: Text(
-          '${job.sourceType.toUpperCase()} • ${job.status}',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: _kWhite,
-          ),
-        ),
-        subtitle: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              children: [
+                Icon(
+                  _getStatusIcon(job.status),
+                  color: _getStatusColor(job.status),
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${job.sourceType.toUpperCase()} • ${job.status}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _kWhite,
+                    ),
+                  ),
+                ),
+                // Action buttons
+                if (isFailed)
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: _kAccentBlue),
+                    tooltip: 'Retry',
+                    onPressed: () {
+                      _bloc.add(RetryTtsJobEvent(job.id));
+                    },
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: _kAccentCoral),
+                  tooltip: 'Delete',
+                  onPressed: () {
+                    _bloc.add(DeleteTtsJobEvent(job.id));
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
             Text(
               _formatDate(job.createdAt),
-              style: const TextStyle(color: _kLightGray),
+              style: const TextStyle(color: _kLightGray, fontSize: 12),
             ),
-            if (job.status == 'completed' && job.audioUrl.isNotEmpty)
-              const SizedBox(height: 4),
-            if (job.status == 'completed' && job.audioUrl.isNotEmpty)
-              _buildAudioPlayer(job.audioUrl, state),
+            // Show error message for failed jobs
+            if (isFailed && job.errorMessage != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _kAccentCoral.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: _kAccentCoral,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        job.errorMessage!,
+                        style: const TextStyle(
+                          color: _kAccentCoral,
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            // Audio player for completed jobs
+            if (job.status == 'completed' && job.audioUrl.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _buildAudioPlayer(job.audioUrl, localPath: job.localPath),
+            ],
           ],
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete_outline, color: _kAccentCoral),
-          onPressed: () {
-            _bloc.add(DeleteTtsJobEvent(job.id));
-          },
         ),
       ),
     );
   }
 
-  Widget _buildAudioPlayer(String audioUrl, TtsState state) {
-    final isPlaying = state is TtsPlaying &&
-        state.currentAudioUrl == audioUrl &&
-        state.isPlaying;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-          onPressed: () {
-            if (isPlaying) {
-              _bloc.add(const PauseAudioEvent());
-            } else {
-              _bloc.add(PlayAudioEvent(audioUrl));
-            }
-          },
-          color: _kAccentBlue,
-        ),
-        if (isPlaying)
-          IconButton(
-            icon: const Icon(Icons.stop),
-            onPressed: () {
-              _bloc.add(const StopAudioEvent());
-            },
-            color: _kAccentCoral,
-          ),
-      ],
+  Widget _buildAudioPlayer(String audioUrl, {String? localPath}) {
+    return AudioPlayerWidget(
+      audioUrl: audioUrl,
+      localPath: localPath,
     );
   }
 

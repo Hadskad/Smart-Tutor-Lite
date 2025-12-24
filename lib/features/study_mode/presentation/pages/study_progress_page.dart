@@ -35,7 +35,7 @@ class _StudyProgressPageState extends State<StudyProgressPage> {
 
   @override
   void dispose() {
-    _bloc.close();
+    // Don't close the bloc - it's a singleton shared across the app
     super.dispose();
   }
 

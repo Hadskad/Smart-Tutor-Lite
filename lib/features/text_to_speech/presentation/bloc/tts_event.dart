@@ -66,3 +66,33 @@ class DeleteTtsJobEvent extends TtsEvent {
 class ProcessQueuedJobsEvent extends TtsEvent {
   const ProcessQueuedJobsEvent();
 }
+
+/// Starts polling for processing job status updates
+class StartPollingEvent extends TtsEvent {
+  const StartPollingEvent();
+}
+
+/// Stops polling for job status updates
+class StopPollingEvent extends TtsEvent {
+  const StopPollingEvent();
+}
+
+/// Internal event triggered when a job status is updated from polling
+class JobStatusUpdatedEvent extends TtsEvent {
+  const JobStatusUpdatedEvent(this.jobId);
+
+  final String jobId;
+
+  @override
+  List<Object?> get props => [jobId];
+}
+
+/// Retry a failed TTS job
+class RetryTtsJobEvent extends TtsEvent {
+  const RetryTtsJobEvent(this.jobId);
+
+  final String jobId;
+
+  @override
+  List<Object?> get props => [jobId];
+}

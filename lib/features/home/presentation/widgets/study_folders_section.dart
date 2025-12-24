@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../../../features/study_folders/presentation/bloc/study_folders_bloc.dart';
 import '../../../../features/study_folders/presentation/bloc/study_folders_state.dart';
 import 'dashboard_folder_card.dart';
-
-// Reuse colors from home dashboard
-const Color _kAccentBlue = Color(0xFF00BFFF);
 
 /// Widget that displays study folders in a 3-column grid layout.
 /// 
@@ -28,7 +26,7 @@ class StudyFoldersSection extends StatelessWidget {
         if (state is StudyFoldersLoading && state.folders.isEmpty) {
           return const Center(
             child: CircularProgressIndicator(
-              color: _kAccentBlue,
+              color: AppColors.accentBlue,
             ),
           );
         }
@@ -80,6 +78,7 @@ class StudyFoldersSection extends StatelessWidget {
             return DashboardFolderCard(
               title: folder.name,
               isCreateTile: false,
+              materialCount: folder.materialCount,
               onTap: () => onFolderTap(folder.id, folder.name),
             );
           },

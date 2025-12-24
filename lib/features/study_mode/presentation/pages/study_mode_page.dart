@@ -44,7 +44,7 @@ class _StudyModePageState extends State<StudyModePage> {
 
   @override
   void dispose() {
-    _bloc.close();
+    // Don't close the bloc - it's a singleton shared across the app
     super.dispose();
   }
 
@@ -229,33 +229,71 @@ class _FlashcardsListState extends State<_FlashcardsList> {
   Widget build(BuildContext context) {
     if (widget.flashcards.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.style,
-              size: 64,
-              color: _kDarkGray,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No flashcards yet',
-              style: TextStyle(
-                color: _kWhite,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: _kAccentBlue.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.style_outlined,
+                  size: 64,
+                  color: _kAccentBlue,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Generate flashcards from summaries or transcriptions',
-              style: const TextStyle(
-                color: _kLightGray,
-                fontSize: 16,
+              const SizedBox(height: 24),
+              const Text(
+                'No flashcards yet',
+                style: TextStyle(
+                  color: _kWhite,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                'Generate flashcards from your notes, transcriptions, or summaries to start studying!',
+                style: const TextStyle(
+                  color: _kLightGray,
+                  fontSize: 16,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              // Action buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _EmptyStateActionButton(
+                    icon: Icons.mic,
+                    label: 'Notes',
+                    onTap: () => Navigator.pushNamed(context, '/transcription'),
+                  ),
+                  const SizedBox(width: 16),
+                  _EmptyStateActionButton(
+                    icon: Icons.summarize,
+                    label: 'Summaries',
+                    onTap: () => Navigator.pushNamed(context, '/summary'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Tap on any note or summary, then select "Generate Flashcards"',
+                style: TextStyle(
+                  color: _kDarkGray,
+                  fontSize: 12,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -308,12 +346,61 @@ class _FlashcardsListState extends State<_FlashcardsList> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          Text(
-                            '${widget.flashcards.length} cards total',
-                            style: const TextStyle(
-                              color: _kLightGray,
-                              fontSize: 14,
-                            ),
+                          const SizedBox(height: 4),
+                          Builder(
+                            builder: (context) {
+                              final knownCount = widget.flashcards
+                                  .where((f) => f.isKnown)
+                                  .length;
+                              final totalCount = widget.flashcards.length;
+                              final progress = totalCount > 0
+                                  ? knownCount / totalCount
+                                  : 0.0;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        '$knownCount/$totalCount mastered',
+                                        style: TextStyle(
+                                          color: knownCount == totalCount && totalCount > 0
+                                              ? _kAccentBlue
+                                              : _kLightGray,
+                                          fontSize: 13,
+                                          fontWeight: knownCount == totalCount && totalCount > 0
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (knownCount == totalCount && totalCount > 0)
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 4),
+                                          child: Icon(
+                                            Icons.check_circle,
+                                            size: 14,
+                                            color: _kAccentBlue,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: progress,
+                                      minHeight: 6,
+                                      backgroundColor: _kBackgroundColor,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        progress >= 1.0
+                                            ? _kAccentBlue
+                                            : _kAccentBlue.withOpacity(0.7),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -351,12 +438,7 @@ class _FlashcardsListState extends State<_FlashcardsList> {
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => FlashcardViewerPage(
-                                  flashcards: widget.flashcards),
-                            ),
-                          );
+                          _showStudySessionDialog(context, widget.flashcards);
                         },
                         icon: const Icon(Icons.play_arrow),
                         label: const Text('Study'),
@@ -476,12 +558,62 @@ class _FlashcardsListState extends State<_FlashcardsList> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            Text(
-                              '${flashcardList.length} flashcards',
-                              style: const TextStyle(
-                                color: _kLightGray,
-                                fontSize: 14,
-                              ),
+                            const SizedBox(height: 4),
+                            // Mastery progress
+                            Builder(
+                              builder: (context) {
+                                final knownCount = flashcardList
+                                    .where((f) => f.isKnown)
+                                    .length;
+                                final totalCount = flashcardList.length;
+                                final progress = totalCount > 0
+                                    ? knownCount / totalCount
+                                    : 0.0;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '$knownCount/$totalCount mastered',
+                                          style: TextStyle(
+                                            color: knownCount == totalCount && totalCount > 0
+                                                ? _kAccentBlue
+                                                : _kLightGray,
+                                            fontSize: 13,
+                                            fontWeight: knownCount == totalCount && totalCount > 0
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
+                                        if (knownCount == totalCount && totalCount > 0)
+                                          Padding(
+                                            padding: const EdgeInsets.only(left: 4),
+                                            child: Icon(
+                                              Icons.check_circle,
+                                              size: 14,
+                                              color: _kAccentBlue,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: LinearProgressIndicator(
+                                        value: progress,
+                                        minHeight: 6,
+                                        backgroundColor: _kBackgroundColor,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          progress >= 1.0
+                                              ? _kAccentBlue
+                                              : _kAccentBlue.withOpacity(0.7),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -546,13 +678,7 @@ class _FlashcardsListState extends State<_FlashcardsList> {
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => FlashcardViewerPage(
-                                  flashcards: flashcardList,
-                                ),
-                              ),
-                            );
+                            _showStudySessionDialog(context, flashcardList);
                           },
                           icon: const Icon(Icons.play_arrow, size: 18),
                           label: const Text('Study'),
@@ -573,6 +699,91 @@ class _FlashcardsListState extends State<_FlashcardsList> {
           );
         }),
       ],
+    );
+  }
+
+  void _showStudySessionDialog(
+    BuildContext context,
+    List<Flashcard> flashcards,
+  ) {
+    bool shuffle = false;
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: _kCardColor,
+          title: const Text(
+            'Start Study Session',
+            style: TextStyle(color: _kWhite),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${flashcards.length} flashcards to study',
+                style: const TextStyle(color: _kLightGray, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Switch(
+                    value: shuffle,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        shuffle = value;
+                      });
+                    },
+                    activeColor: _kAccentBlue,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Shuffle cards',
+                          style: TextStyle(color: _kWhite, fontSize: 16),
+                        ),
+                        Text(
+                          'Randomize the order of flashcards',
+                          style: TextStyle(color: _kDarkGray, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel', style: TextStyle(color: _kLightGray)),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => FlashcardViewerPage(
+                      flashcards: flashcards,
+                      shuffle: shuffle,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Start'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kAccentBlue,
+                foregroundColor: _kWhite,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -620,7 +831,6 @@ class _FlashcardsListState extends State<_FlashcardsList> {
   ) async {
     final bloc = context.read<StudyModeBloc>();
     final messenger = ScaffoldMessenger.of(context);
-    final errorColor = Theme.of(context).colorScheme.error;
 
     // Show loading indicator
     messenger.showSnackBar(
@@ -641,76 +851,20 @@ class _FlashcardsListState extends State<_FlashcardsList> {
             ),
           ],
         ),
-        duration: const Duration(seconds: 10),
+        duration: const Duration(seconds: 5),
         behavior: SnackBarBehavior.floating,
       ),
     );
 
-    // Track reloads - we expect one reload per deletion
-    final completer = Completer<void>();
-    late StreamSubscription subscription;
-    bool hasError = false;
-    String? errorMessage;
-    int expectedReloads = flashcards.length;
-    int reloadCount = 0;
-    Timer? debounceTimer;
+    // Use batch delete event for efficient deletion
+    bloc.add(DeleteFlashcardsBatchEvent(
+      flashcards.map((f) => f.id).toList(),
+    ));
 
-    // Listen for state changes
-    subscription = bloc.stream.listen((state) {
+    // Listen for the result
+    final subscription = bloc.stream.listen((state) {
       if (state is StudyModeFlashcardsLoaded) {
-        reloadCount++;
-        // Wait for all deletions to complete (all reloads done)
-        // Use debounce to wait for the final reload
-        debounceTimer?.cancel();
-        debounceTimer = Timer(const Duration(milliseconds: 300), () {
-          if (reloadCount >= expectedReloads && !completer.isCompleted) {
-            subscription.cancel();
-            completer.complete();
-          }
-        });
-      } else if (state is StudyModeError) {
-        // Error occurred
-        hasError = true;
-        errorMessage = state.message;
-        debounceTimer?.cancel();
-        subscription.cancel();
-        if (!completer.isCompleted) {
-          completer.complete();
-        }
-      }
-    });
-
-    // Delete all flashcards
-    for (final flashcard in flashcards) {
-      bloc.add(DeleteFlashcardEvent(flashcard.id));
-    }
-
-    // Wait for deletions to complete (with timeout)
-    try {
-      await completer.future.timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          debounceTimer?.cancel();
-          subscription.cancel();
-          // Force a reload to ensure UI is updated
-          bloc.add(const LoadFlashcardsEvent());
-          throw TimeoutException('Deletion timed out');
-        },
-      );
-
-      // Hide loading snackbar
-      messenger.hideCurrentSnackBar();
-
-      // Show result message
-      if (hasError) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(errorMessage ?? 'Error deleting flashcards'),
-            backgroundColor: errorColor,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else {
+        messenger.hideCurrentSnackBar();
         messenger.showSnackBar(
           SnackBar(
             content: Text('Deleted ${flashcards.length} flashcards'),
@@ -718,20 +872,62 @@ class _FlashcardsListState extends State<_FlashcardsList> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+      } else if (state is StudyModeError) {
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(state.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
-    } catch (e) {
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Error deleting flashcards: ${e.toString()}'),
-          backgroundColor: errorColor,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      // Ensure cleanup happens in all code paths
-      debounceTimer?.cancel();
+    });
+
+    // Cancel subscription after a reasonable timeout
+    Future.delayed(const Duration(seconds: 10), () {
       subscription.cancel();
-    }
+    });
+  }
+}
+
+class _EmptyStateActionButton extends StatelessWidget {
+  const _EmptyStateActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _kCardColor,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Column(
+            children: [
+              Icon(icon, color: _kAccentBlue, size: 32),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: _kWhite,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -214,6 +214,21 @@ class StudyModeRepositoryImpl implements StudyModeRepository {
   }
 
   @override
+  Future<Either<Failure, void>> deleteFlashcards(List<String> flashcardIds) async {
+    try {
+      await _localDataSource.deleteFlashcards(flashcardIds);
+      return const Right(null);
+    } catch (error) {
+      return Left(
+        LocalFailure(
+          message: 'Failed to delete flashcards',
+          cause: error,
+        ),
+      );
+    }
+  }
+
+  @override
   Future<Either<Failure, StudySession>> startStudySession({
     required List<String> flashcardIds,
   }) async {

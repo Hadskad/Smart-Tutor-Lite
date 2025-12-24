@@ -24,6 +24,7 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
     on<LoadSummariesEvent>(_onLoadSummaries);
     on<DeleteSummaryEvent>(_onDeleteSummary);
     on<UpdateSummaryEvent>(_onUpdateSummary);
+    on<CancelSummarizationEvent>(_onCancelSummarization);
   }
 
   final SummarizeText _summarizeText;
@@ -33,10 +34,27 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
   final AppLogger _logger;
   final List<Summary> _summaries = <Summary>[];
 
+  /// Flag to track if a cancellation has been requested
+  bool _isCancellationRequested = false;
+
+  void _onCancelSummarization(
+    CancelSummarizationEvent event,
+    Emitter<SummaryState> emit,
+  ) {
+    _isCancellationRequested = true;
+    emit(
+      SummaryCancelled(
+        message: 'Summarization cancelled',
+        summaries: List.unmodifiable(_summaries),
+      ),
+    );
+  }
+
   Future<void> _onSummarizeText(
     SummarizeTextEvent event,
     Emitter<SummaryState> emit,
   ) async {
+    _isCancellationRequested = false;
     emit(SummaryLoading(summaries: List.unmodifiable(_summaries)));
 
     const segmentId = 'summarize_text';
@@ -46,35 +64,40 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
         text: event.text,
       );
 
+      // Check if cancelled during operation
+      if (_isCancellationRequested) {
+        return;
+      }
+
       result.fold(
-      (failure) {
-        final message = failure.message ?? 'Failed to summarize text';
-        // Check if request was queued
-        if (message.contains('queued') || message.contains('Queued')) {
+        (failure) {
+          final message = failure.message ?? 'Failed to summarize text';
+          // Check if request was queued
+          if (message.contains('queued') || message.contains('Queued')) {
+            emit(
+              SummaryQueued(
+                message: message,
+                summaries: List.unmodifiable(_summaries),
+              ),
+            );
+          } else {
+            emit(
+              SummaryError(
+                message: message,
+                summaries: List.unmodifiable(_summaries),
+              ),
+            );
+          }
+        },
+        (summary) {
+          _summaries.insert(0, summary);
           emit(
-            SummaryQueued(
-              message: message,
+            SummarySuccess(
+              summary: summary,
               summaries: List.unmodifiable(_summaries),
             ),
           );
-        } else {
-          emit(
-            SummaryError(
-              message: message,
-              summaries: List.unmodifiable(_summaries),
-            ),
-          );
-        }
-      },
-      (summary) {
-        _summaries.insert(0, summary);
-        emit(
-          SummarySuccess(
-            summary: summary,
-            summaries: List.unmodifiable(_summaries),
-          ),
-        );
-      },
+        },
       );
     } finally {
       await _logMetrics(segmentId);
@@ -85,6 +108,7 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
     SummarizePdfEvent event,
     Emitter<SummaryState> emit,
   ) async {
+    _isCancellationRequested = false;
     emit(SummaryLoading(summaries: List.unmodifiable(_summaries)));
 
     const segmentId = 'summarize_pdf';
@@ -94,35 +118,40 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
         pdfUrl: event.pdfUrl,
       );
 
+      // Check if cancelled during operation
+      if (_isCancellationRequested) {
+        return;
+      }
+
       result.fold(
-      (failure) {
-        final message = failure.message ?? 'Failed to summarize PDF';
-        // Check if request was queued
-        if (message.contains('queued') || message.contains('Queued')) {
+        (failure) {
+          final message = failure.message ?? 'Failed to summarize PDF';
+          // Check if request was queued
+          if (message.contains('queued') || message.contains('Queued')) {
+            emit(
+              SummaryQueued(
+                message: message,
+                summaries: List.unmodifiable(_summaries),
+              ),
+            );
+          } else {
+            emit(
+              SummaryError(
+                message: message,
+                summaries: List.unmodifiable(_summaries),
+              ),
+            );
+          }
+        },
+        (summary) {
+          _summaries.insert(0, summary);
           emit(
-            SummaryQueued(
-              message: message,
+            SummarySuccess(
+              summary: summary,
               summaries: List.unmodifiable(_summaries),
             ),
           );
-        } else {
-          emit(
-            SummaryError(
-              message: message,
-              summaries: List.unmodifiable(_summaries),
-            ),
-          );
-        }
-      },
-      (summary) {
-        _summaries.insert(0, summary);
-        emit(
-          SummarySuccess(
-            summary: summary,
-            summaries: List.unmodifiable(_summaries),
-          ),
-        );
-      },
+        },
       );
     } finally {
       await _logMetrics(segmentId);
@@ -190,7 +219,7 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
         final index = _summaries.indexWhere((s) => s.id == updatedSummary.id);
         if (index != -1) {
           _summaries[index] = updatedSummary;
-        } 
+        }
         emit(SummaryInitial(summaries: List.unmodifiable(_summaries)));
       },
     );
@@ -211,4 +240,3 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
     );
   }
 }
-

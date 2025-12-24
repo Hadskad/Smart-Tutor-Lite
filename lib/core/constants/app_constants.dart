@@ -14,6 +14,10 @@ class AppConstants {
 
   // Network speed test configuration
   static const Duration speedTestInterval = Duration(seconds: 25);
-  static const double minStrongSpeedKbps = 200;
+  static const double minStrongSpeedKbps = 0;
   static const Duration speedTestTimeout = Duration(seconds: 10);
+
+  // PDF Summarization configuration
+  static const int maxPdfSizeBytes = 30 * 1024 * 1024; // 30MB max file size
+  static const Duration summarizationTimeout = Duration(minutes: 10);
 }

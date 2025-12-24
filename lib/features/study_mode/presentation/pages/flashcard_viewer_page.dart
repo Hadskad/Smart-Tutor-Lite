@@ -17,20 +17,44 @@ const Color _kWhite = Colors.white;
 const Color _kLightGray = Color(0xFFCCCCCC);
 const Color _kDarkGray = Color(0xFF888888);
 
-class FlashcardViewerPage extends StatelessWidget {
+class FlashcardViewerPage extends StatefulWidget {
   const FlashcardViewerPage({
     super.key,
     required this.flashcards,
+    this.shuffle = false,
   });
 
   final List<Flashcard> flashcards;
+  final bool shuffle;
+
+  @override
+  State<FlashcardViewerPage> createState() => _FlashcardViewerPageState();
+}
+
+class _FlashcardViewerPageState extends State<FlashcardViewerPage> {
+  late final StudyModeBloc _bloc;
+
+  @override
+  void initState() {
+    super.initState();
+    _bloc = getIt<StudyModeBloc>();
+    // Start the study session with the provided flashcards
+    _bloc.add(StartStudySessionEvent(
+      flashcardIds: widget.flashcards.map((f) => f.id).toList(),
+      shuffle: widget.shuffle,
+    ));
+  }
+
+  @override
+  void dispose() {
+    // Don't close the bloc - it's a singleton shared across the app
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => getIt<StudyModeBloc>()
-        ..add(StartStudySessionEvent(
-            flashcardIds: flashcards.map((f) => f.id).toList())),
+    return BlocProvider.value(
+      value: _bloc,
       child: Scaffold(
         backgroundColor: _kBackgroundColor,
         appBar: AppBar(
@@ -45,6 +69,24 @@ class FlashcardViewerPage extends StatelessWidget {
             ),
           ),
           iconTheme: const IconThemeData(color: _kWhite),
+          actions: [
+            // Undo button
+            Builder(
+              builder: (context) {
+                final canUndo = _bloc.canUndo;
+                return IconButton(
+                  icon: Icon(
+                    Icons.undo,
+                    color: canUndo ? _kAccentBlue : _kDarkGray,
+                  ),
+                  onPressed: canUndo
+                      ? () => _bloc.add(const UndoLastActionEvent())
+                      : null,
+                  tooltip: 'Undo last action',
+                );
+              },
+            ),
+          ],
         ),
         body: BlocBuilder<StudyModeBloc, StudyModeState>(
           builder: (context, state) {
@@ -98,25 +140,46 @@ class _StudySessionView extends StatefulWidget {
 }
 
 class _StudySessionViewState extends State<_StudySessionView> {
-  bool _isFlipped = false;
+  double _swipeOffset = 0.0;
+  static const double _swipeThreshold = 100.0;
 
-  @override
-  void initState() {
-    super.initState();
-    _isFlipped = widget.sessionState.isFlipped;
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    setState(() {
+      _swipeOffset += details.delta.dx;
+    });
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details, StudyModeBloc bloc, String flashcardId) {
+    if (_swipeOffset.abs() > _swipeThreshold) {
+      if (_swipeOffset > 0) {
+        // Swipe right = Knew It
+        bloc.add(MarkFlashcardKnownEvent(flashcardId: flashcardId));
+      } else {
+        // Swipe left = Didn't Know
+        bloc.add(MarkFlashcardUnknownEvent(flashcardId: flashcardId));
+      }
+    }
+    // Reset offset
+    setState(() {
+      _swipeOffset = 0.0;
+    });
+  }
+
+  Color _getSwipeIndicatorColor() {
+    if (_swipeOffset.abs() < 20) return Colors.transparent;
+    if (_swipeOffset > 0) {
+      // Swiping right = green (knew it)
+      return _kAccentBlue.withOpacity((_swipeOffset / _swipeThreshold).clamp(0.0, 1.0) * 0.3);
+    } else {
+      // Swiping left = red (didn't know)
+      return _kAccentCoral.withOpacity((-_swipeOffset / _swipeThreshold).clamp(0.0, 1.0) * 0.3);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final bloc = context.read<StudyModeBloc>();
-    return BlocConsumer<StudyModeBloc, StudyModeState>(
-      listener: (context, state) {
-        if (state is StudyModeSessionActive) {
-          setState(() {
-            _isFlipped = state.isFlipped;
-          });
-        }
-      },
+    return BlocBuilder<StudyModeBloc, StudyModeState>(
       builder: (context, state) {
         if (state is! StudyModeSessionActive) {
           return const Center(
@@ -126,6 +189,7 @@ class _StudySessionViewState extends State<_StudySessionView> {
 
         final session = state.session;
         final flashcard = state.currentFlashcard;
+        final isFlipped = state.isFlipped;
         final progress = state.progress;
         final cardNumber = state.currentFlashcardIndex + 1;
         final totalCards = session.flashcardIds.length;
@@ -155,17 +219,18 @@ class _StudySessionViewState extends State<_StudySessionView> {
                 ],
               ),
             ),
-            // Flashcard
+            // Flashcard with swipe support
             Expanded(
               child: Center(
                 child: GestureDetector(
-                  onTap: () {
-                    bloc.flipCard();
-                    setState(() {
-                      _isFlipped = !_isFlipped;
-                    });
-                  },
-                  child: Container(
+                  onTap: () => bloc.flipCard(),
+                  onHorizontalDragUpdate: _onHorizontalDragUpdate,
+                  onHorizontalDragEnd: (details) => _onHorizontalDragEnd(details, bloc, flashcard.id),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 100),
+                    transform: Matrix4.identity()
+                      ..translate(_swipeOffset * 0.5)
+                      ..rotateZ(_swipeOffset * 0.0005),
                     margin: const EdgeInsets.all(24),
                     width: double.infinity,
                     constraints: const BoxConstraints(maxWidth: 600),
@@ -173,6 +238,10 @@ class _StudySessionViewState extends State<_StudySessionView> {
                       decoration: BoxDecoration(
                         color: _kCardColor,
                         borderRadius: BorderRadius.circular(20.0),
+                        border: Border.all(
+                          color: _getSwipeIndicatorColor(),
+                          width: 3,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.3),
@@ -182,20 +251,47 @@ class _StudySessionViewState extends State<_StudySessionView> {
                         ],
                       ),
                       padding: const EdgeInsets.all(32),
-                      child: Center(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 300),
-                          child: Text(
-                            _isFlipped ? flashcard.back : flashcard.front,
-                            key: ValueKey(_isFlipped),
-                            style: const TextStyle(
-                              color: _kWhite,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w500,
+                      child: Stack(
+                        children: [
+                          // Swipe direction indicators
+                          if (_swipeOffset.abs() > 30)
+                            Positioned(
+                              top: 0,
+                              left: _swipeOffset > 0 ? null : 0,
+                              right: _swipeOffset > 0 ? 0 : null,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: _swipeOffset > 0 ? _kAccentBlue : _kAccentCoral,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  _swipeOffset > 0 ? 'KNEW IT' : "DIDN'T KNOW",
+                                  style: const TextStyle(
+                                    color: _kWhite,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
                             ),
-                            textAlign: TextAlign.center,
+                          // Card content
+                          Center(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              child: Text(
+                                isFlipped ? flashcard.back : flashcard.front,
+                                key: ValueKey('${flashcard.id}_$isFlipped'),
+                                style: const TextStyle(
+                                  color: _kWhite,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
@@ -245,7 +341,7 @@ class _StudySessionViewState extends State<_StudySessionView> {
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Text(
-                'Tap card to flip • Swipe to navigate',
+                'Tap to flip • Swipe left if unknown • Swipe right if known',
                 style: const TextStyle(
                   color: _kDarkGray,
                   fontSize: 12,

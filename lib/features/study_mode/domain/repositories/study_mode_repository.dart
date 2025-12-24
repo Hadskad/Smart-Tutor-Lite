@@ -34,6 +34,9 @@ abstract class StudyModeRepository {
   /// Delete a flashcard
   Future<Either<Failure, void>> deleteFlashcard(String flashcardId);
 
+  /// Delete multiple flashcards at once
+  Future<Either<Failure, void>> deleteFlashcards(List<String> flashcardIds);
+
   /// Start a new study session
   Future<Either<Failure, StudySession>> startStudySession({
     required List<String> flashcardIds,

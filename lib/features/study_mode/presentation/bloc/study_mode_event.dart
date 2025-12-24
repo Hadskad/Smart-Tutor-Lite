@@ -44,12 +44,14 @@ class LoadFlashcardsBySourceEvent extends StudyModeEvent {
 class StartStudySessionEvent extends StudyModeEvent {
   const StartStudySessionEvent({
     required this.flashcardIds,
+    this.shuffle = false,
   });
 
   final List<String> flashcardIds;
+  final bool shuffle;
 
   @override
-  List<Object?> get props => [flashcardIds];
+  List<Object?> get props => [flashcardIds, shuffle];
 }
 
 class MarkFlashcardKnownEvent extends StudyModeEvent {
@@ -91,10 +93,25 @@ class DeleteFlashcardEvent extends StudyModeEvent {
   List<Object?> get props => [flashcardId];
 }
 
+/// Event to delete multiple flashcards at once (batch operation)
+class DeleteFlashcardsBatchEvent extends StudyModeEvent {
+  const DeleteFlashcardsBatchEvent(this.flashcardIds);
+
+  final List<String> flashcardIds;
+
+  @override
+  List<Object?> get props => [flashcardIds];
+}
+
 class LoadProgressEvent extends StudyModeEvent {
   const LoadProgressEvent();
 }
 
 class FlipCardEvent extends StudyModeEvent {
   const FlipCardEvent();
+}
+
+/// Event to undo the last card marking action
+class UndoLastActionEvent extends StudyModeEvent {
+  const UndoLastActionEvent();
 }

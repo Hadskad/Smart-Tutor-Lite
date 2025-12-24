@@ -18,7 +18,20 @@ class TtsInitial extends TtsState {
 }
 
 class TtsProcessing extends TtsState {
-  const TtsProcessing({super.jobs = const []});
+  const TtsProcessing({
+    super.jobs = const [],
+    this.statusMessage,
+    this.estimatedSeconds,
+  });
+
+  /// Status message to display during processing
+  final String? statusMessage;
+
+  /// Estimated time remaining in seconds
+  final int? estimatedSeconds;
+
+  @override
+  List<Object?> get props => [...super.props, statusMessage, estimatedSeconds];
 }
 
 class TtsSuccess extends TtsState {

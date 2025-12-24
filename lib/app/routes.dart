@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../features/profile/presentation/pages/profile_page.dart';
+import '../features/quiz/presentation/bloc/quiz_bloc.dart';
 import '../features/quiz/presentation/pages/quiz_creation_page.dart';
 import '../features/study_mode/presentation/pages/study_mode_page.dart';
 import '../features/study_folders/presentation/pages/study_folder_detail_page.dart';
 import '../features/summarization/presentation/pages/summary_page.dart';
 import '../features/text_to_speech/presentation/pages/tts_page.dart';
 import '../features/transcription/presentation/pages/transcription_page.dart';
+import '../injection_container.dart';
 
 class AppRoutes {
   static const String transcription = '/transcription';
@@ -31,8 +34,12 @@ class AppRoutes {
           settings: settings,
         );
       case quiz:
+        // Wrap quiz flow with a single QuizBloc instance
         return MaterialPageRoute(
-          builder: (_) => const QuizCreationPage(),
+          builder: (_) => BlocProvider<QuizBloc>(
+            create: (_) => getIt<QuizBloc>(),
+            child: const QuizCreationPage(),
+          ),
           settings: settings,
         );
       case tts:

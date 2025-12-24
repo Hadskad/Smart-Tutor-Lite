@@ -6,21 +6,37 @@ import '../../../../features/study_folders/presentation/bloc/study_folders_bloc.
 import '../../../../features/study_folders/presentation/bloc/study_folders_event.dart';
 import '../../../../features/study_folders/presentation/bloc/study_folders_state.dart';
 
-/// Dialog for creating a new study folder.
-///
-/// Matches the dark theme of the home dashboard.
-class CreateFolderDialog extends StatefulWidget {
-  const CreateFolderDialog({super.key});
+/// Dialog for renaming an existing study folder.
+class RenameFolderDialog extends StatefulWidget {
+  const RenameFolderDialog({
+    super.key,
+    required this.folderId,
+    required this.currentName,
+  });
+
+  final String folderId;
+  final String currentName;
 
   @override
-  State<CreateFolderDialog> createState() => _CreateFolderDialogState();
+  State<RenameFolderDialog> createState() => _RenameFolderDialogState();
 }
 
-class _CreateFolderDialogState extends State<CreateFolderDialog> {
+class _RenameFolderDialogState extends State<RenameFolderDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _textController = TextEditingController();
+  late final TextEditingController _textController;
   String? _errorMessage;
-  bool _isCreating = false;
+  bool _isRenaming = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.currentName);
+    // Select all text for easy replacement
+    _textController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: widget.currentName.length,
+    );
+  }
 
   @override
   void dispose() {
@@ -28,40 +44,52 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
     super.dispose();
   }
 
-  void _handleCreate() {
-    final folderName = _textController.text.trim();
+  void _handleRename() {
+    final newName = _textController.text.trim();
 
-    if (folderName.isEmpty) {
+    if (newName.isEmpty) {
       setState(() {
         _errorMessage = 'Folder name cannot be empty';
       });
       return;
     }
 
+    if (newName == widget.currentName) {
+      // No change, just close
+      Navigator.of(context).pop();
+      return;
+    }
+
     setState(() {
       _errorMessage = null;
-      _isCreating = true;
+      _isRenaming = true;
     });
 
-    // Dispatch create folder event
-    context.read<StudyFoldersBloc>().add(CreateFolderEvent(name: folderName));
+    // Dispatch rename folder event
+    context.read<StudyFoldersBloc>().add(RenameFolderEvent(
+      folderId: widget.folderId,
+      newName: newName,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocListener<StudyFoldersBloc, StudyFoldersState>(
       listener: (context, state) {
-        if (!_isCreating) return; // Only handle states during creation
+        if (!_isRenaming) return;
 
         if (state is StudyFoldersError) {
-          // Show error in dialog and allow retry
           setState(() {
             _errorMessage = state.message;
-            _isCreating = false;
+            _isRenaming = false;
           });
         } else if (state is StudyFoldersLoaded) {
-          // Success - close dialog
-          Navigator.of(context).pop();
+          // Check if folder was renamed
+          final folder = state.folders.where((f) => f.id == widget.folderId).firstOrNull;
+          if (folder != null && folder.name == _textController.text.trim()) {
+            // Success - close dialog and return new name
+            Navigator.of(context).pop(folder.name);
+          }
         }
       },
       child: AlertDialog(
@@ -70,7 +98,7 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
           borderRadius: BorderRadius.circular(20.0),
         ),
         title: const Text(
-          'New Folder',
+          'Rename Folder',
           style: TextStyle(
             color: AppColors.white,
             fontSize: 20,
@@ -86,27 +114,24 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
               TextField(
                 controller: _textController,
                 autofocus: true,
-                enabled: !_isCreating,
+                enabled: !_isRenaming,
                 style: const TextStyle(color: AppColors.white),
                 decoration: InputDecoration(
-                  hintText: 'Enter folder name',
+                  hintText: 'Enter new folder name',
                   hintStyle: const TextStyle(color: AppColors.lightGray),
                   filled: true,
                   fillColor: AppColors.background,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12.0),
-                    borderSide:
-                        const BorderSide(color: AppColors.lightGray, width: 1.0),
+                    borderSide: const BorderSide(color: AppColors.lightGray, width: 1.0),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12.0),
-                    borderSide:
-                        const BorderSide(color: AppColors.lightGray, width: 1.0),
+                    borderSide: const BorderSide(color: AppColors.lightGray, width: 1.0),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12.0),
-                    borderSide:
-                        const BorderSide(color: AppColors.accentBlue, width: 2.0),
+                    borderSide: const BorderSide(color: AppColors.accentBlue, width: 2.0),
                   ),
                   errorBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12.0),
@@ -118,16 +143,15 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
                   ),
                 ),
                 onChanged: (_) {
-                  // Clear error when user starts typing
-                  if (_errorMessage != null && !_isCreating) {
+                  if (_errorMessage != null && !_isRenaming) {
                     setState(() {
                       _errorMessage = null;
                     });
                   }
                 },
                 onSubmitted: (_) {
-                  if (!_isCreating) {
-                    _handleCreate();
+                  if (!_isRenaming) {
+                    _handleRename();
                   }
                 },
               ),
@@ -141,11 +165,11 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
                   ),
                 ),
               ],
-              if (_isCreating) ...[
+              if (_isRenaming) ...[
                 const SizedBox(height: 12),
-                Row(
+                const Row(
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
@@ -153,10 +177,10 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
                         color: AppColors.accentBlue,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     Text(
-                      'Creating folder...',
-                      style: const TextStyle(
+                      'Renaming folder...',
+                      style: TextStyle(
                         color: AppColors.lightGray,
                         fontSize: 12,
                       ),
@@ -169,14 +193,14 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
         ),
         actions: [
           TextButton(
-            onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
+            onPressed: _isRenaming ? null : () => Navigator.of(context).pop(),
             child: const Text(
               'Cancel',
               style: TextStyle(color: AppColors.lightGray),
             ),
           ),
           ElevatedButton(
-            onPressed: _isCreating ? null : _handleCreate,
+            onPressed: _isRenaming ? null : _handleRename,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accentBlue,
               foregroundColor: AppColors.white,
@@ -184,10 +208,11 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
                 borderRadius: BorderRadius.circular(8.0),
               ),
             ),
-            child: const Text('OK'),
+            child: const Text('Rename'),
           ),
         ],
       ),
     );
   }
 }
+

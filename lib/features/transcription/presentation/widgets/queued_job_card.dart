@@ -18,12 +18,18 @@ class QueuedJobCard extends StatelessWidget {
     this.onCancel,
     this.onRetry,
     this.onViewNote,
+    this.queuePosition,
+    this.totalInQueue,
+    this.estimatedWaitMinutes,
   });
 
   final QueuedTranscriptionJob job;
   final VoidCallback? onCancel;
   final VoidCallback? onRetry;
   final VoidCallback? onViewNote;
+  final int? queuePosition;
+  final int? totalInQueue;
+  final int? estimatedWaitMinutes;
 
   @override
   Widget build(BuildContext context) {
@@ -122,6 +128,12 @@ class QueuedJobCard extends StatelessWidget {
                           ],
                         ),
                       ),
+                      // Queue position and ETA for waiting jobs
+                      if (job.status == QueuedTranscriptionJobStatus.waiting &&
+                          queuePosition != null) ...[
+                        const SizedBox(height: 8),
+                        _buildQueueInfo(),
+                      ],
                     ],
                   ),
                 ),
@@ -262,6 +274,68 @@ class QueuedJobCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildQueueInfo() {
+    final posText = totalInQueue != null
+        ? '#$queuePosition of $totalInQueue in queue'
+        : '#$queuePosition in queue';
+
+    String? etaText;
+    if (estimatedWaitMinutes != null) {
+      if (estimatedWaitMinutes! < 1) {
+        etaText = 'Starting soon...';
+      } else if (estimatedWaitMinutes! < 60) {
+        etaText = '~${estimatedWaitMinutes}min wait';
+      } else {
+        final hours = estimatedWaitMinutes! ~/ 60;
+        final mins = estimatedWaitMinutes! % 60;
+        etaText = mins > 0 ? '~${hours}h ${mins}min wait' : '~${hours}h wait';
+      }
+    }
+
+    return Row(
+      children: [
+        Icon(
+          Icons.queue,
+          size: 14,
+          color: _kDarkGray,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          posText,
+          style: const TextStyle(
+            color: _kDarkGray,
+            fontSize: 12,
+          ),
+        ),
+        if (etaText != null) ...[
+          const SizedBox(width: 8),
+          Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              color: _kDarkGray.withOpacity(0.5),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.timer_outlined,
+            size: 14,
+            color: _kDarkGray,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            etaText,
+            style: const TextStyle(
+              color: _kDarkGray,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ],
     );
   }
 

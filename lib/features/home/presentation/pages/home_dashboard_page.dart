@@ -39,7 +39,7 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
 
   @override
   void dispose() {
-    _studyFoldersBloc.close();
+    // Don't close the bloc - it's a singleton shared across pages
     super.dispose();
   }
 

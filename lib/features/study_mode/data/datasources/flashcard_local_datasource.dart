@@ -16,6 +16,7 @@ abstract class FlashcardLocalDataSource {
   Future<void> saveFlashcard(FlashcardModel flashcard);
   Future<void> saveFlashcards(List<FlashcardModel> flashcards);
   Future<void> deleteFlashcard(String id);
+  Future<void> deleteFlashcards(List<String> ids);
 
   // Study Session methods
   Future<void> saveStudySession(StudySessionModel session);
@@ -160,6 +161,17 @@ class FlashcardLocalDataSourceImpl implements FlashcardLocalDataSource {
     } catch (e) {
       throw CacheFailure(
           message: 'Failed to delete flashcard: ${e.toString()}');
+    }
+  }
+
+  @override
+  Future<void> deleteFlashcards(List<String> ids) async {
+    try {
+      final box = await _getFlashcardsBox();
+      await box.deleteAll(ids);
+    } catch (e) {
+      throw CacheFailure(
+          message: 'Failed to delete flashcards: ${e.toString()}');
     }
   }
 

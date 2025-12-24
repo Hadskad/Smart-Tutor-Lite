@@ -57,3 +57,14 @@ class SummaryQueued extends SummaryState {
   List<Object?> get props => [...super.props, message];
 }
 
+class SummaryCancelled extends SummaryState {
+  const SummaryCancelled({
+    required this.message,
+    super.summaries = const [],
+  });
+
+  final String message;
+
+  @override
+  List<Object?> get props => [...super.props, message];
+}

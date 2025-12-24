@@ -85,7 +85,7 @@ pod --version
    ⚠️ **Important**: Whisper model files are excluded from the repository and must be downloaded separately.
    
     Download Whisper model files to assets/models/:
-     Run: bash scripts/setup_whisper.sh (downloads models and whisper.cpp sources)
+     Run: bash scripts/setup_whisper.sh (this downloads models and whisper.cpp sources) use Git Bash or WSL if on windows
       Or manually download ggml-base.en.bin and/or ggml-tiny.en.bin from Hugging Face
 
    **See [SETUP.md](SETUP.md) for complete instructions on obtaining Whisper model files.**
@@ -99,8 +99,7 @@ pod --version
    ```
 
 4. **Generate code files**
-   ```bash
-   run the below command
+   ```bash 
    flutter pub run build_runner build --delete-conflicting-outputs
    ```
 

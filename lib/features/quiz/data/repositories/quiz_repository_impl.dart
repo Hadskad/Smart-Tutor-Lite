@@ -203,32 +203,35 @@ class QuizRepositoryImpl implements QuizRepository {
     try {
       // Get quiz to calculate score
       final quizResult = await getQuiz(quizId);
-      return quizResult.fold(
-        (failure) => Left(failure),
-        (quiz) async {
-          // Calculate score locally
-          int score = 0;
-          for (final question in quiz.questions) {
-            final selectedAnswer = answers[question.id];
-            if (selectedAnswer == question.correctAnswer) {
-              score++;
-            }
-          }
+      
+      // Handle fold result properly with async/await
+      if (quizResult.isLeft()) {
+        return Left(quizResult.fold((l) => l, (_) => throw StateError('Unreachable')));
+      }
+      
+      final quiz = quizResult.getOrElse(() => throw StateError('Quiz not found'));
+      
+      // Calculate score locally
+      int score = 0;
+      for (final question in quiz.questions) {
+        final selectedAnswer = answers[question.id];
+        if (selectedAnswer == question.correctAnswer) {
+          score++;
+        }
+      }
 
-          final result = QuizResultModel(
-            quizId: quizId,
-            answers: answers,
-            score: score,
-            totalQuestions: quiz.questions.length,
-            completedAt: DateTime.now(),
-          );
-
-          // Cache result locally
-          await _cacheQuizResult(result);
-
-          return Right(result.toEntity());
-        },
+      final result = QuizResultModel(
+        quizId: quizId,
+        answers: answers,
+        score: score,
+        totalQuestions: quiz.questions.length,
+        completedAt: DateTime.now(),
       );
+
+      // Cache result locally
+      await _cacheQuizResult(result);
+
+      return Right(result.toEntity());
     } catch (error) {
       return Left(
         LocalFailure(
@@ -282,6 +285,7 @@ class QuizRepositoryImpl implements QuizRepository {
   }
 
   /// Process all pending queued quizzes
+  @override
   Future<void> processQueuedQuizzes() async {
     try {
       final connected = await _networkInfo.isConnected;

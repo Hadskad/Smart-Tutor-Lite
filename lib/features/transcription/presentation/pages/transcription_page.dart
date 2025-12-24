@@ -24,6 +24,7 @@ const Color _kAccentCoral = Color(0xFFFF7043);
 const Color _kWhite = Colors.white;
 const Color _kLightGray = Color(0xFFCCCCCC);
 const Color _kDarkGray = Color(0xFF888888);
+const Color _kYellow = Color(0xFFFFB74D);
 
 class TranscriptionPage extends StatefulWidget {
   const TranscriptionPage({super.key});
@@ -489,8 +490,33 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final job = queue[index];
+            // Calculate queue position for waiting jobs
+            final waitingJobs = queue
+                .where((j) =>
+                    j.status == QueuedTranscriptionJobStatus.waiting ||
+                    j.status == QueuedTranscriptionJobStatus.processing)
+                .toList();
+            final queuePosition = waitingJobs.indexOf(job) + 1;
+            final totalWaiting = waitingJobs.length;
+            // Estimate ~2-3 minutes per job (based on average processing time)
+            final estimatedWaitMinutes =
+                job.status == QueuedTranscriptionJobStatus.waiting
+                    ? (queuePosition - 1) * 3
+                    : null;
+
             return QueuedJobCard(
               job: job,
+              queuePosition:
+                  job.status == QueuedTranscriptionJobStatus.waiting ||
+                          job.status == QueuedTranscriptionJobStatus.processing
+                      ? queuePosition
+                      : null,
+              totalInQueue:
+                  job.status == QueuedTranscriptionJobStatus.waiting ||
+                          job.status == QueuedTranscriptionJobStatus.processing
+                      ? totalWaiting
+                      : null,
+              estimatedWaitMinutes: estimatedWaitMinutes,
               onCancel: job.status == QueuedTranscriptionJobStatus.waiting ||
                       job.status == QueuedTranscriptionJobStatus.failed
                   ? () {
@@ -655,47 +681,67 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
       );
     }
 
-    return SliverList.separated(
-      itemCount: history.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final transcription = history[index];
-        final isFailed = transcription.isFailed;
+    return BlocBuilder<TranscriptionBloc, TranscriptionState>(
+      buildWhen: (prev, curr) =>
+          prev.formattingTranscriptionId != curr.formattingTranscriptionId,
+      builder: (context, state) {
+        final formattingId = state.formattingTranscriptionId;
 
-        return NoteListCard(
-          transcription: transcription,
-          onTap: isFailed
-              ? null
-              : () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NoteDetailPage(
-                        transcription: transcription,
-                      ),
-                    ),
-                  );
-                },
-          onEditTitle: isFailed
-              ? null
-              : () {
-                  _showEditTitleDialog(context, transcription);
-                },
-          onDelete: () {
-            _showDeleteConfirmationDialog(context, transcription);
+        return SliverList.separated(
+          itemCount: history.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final transcription = history[index];
+            final isFailed = transcription.isFailed;
+            final isUnformatted = !isFailed &&
+                transcription.structuredNote == null &&
+                (transcription.text?.isNotEmpty ?? false);
+            final isFormatting = formattingId == transcription.id;
+
+            return NoteListCard(
+              transcription: transcription,
+              isFormatting: isFormatting,
+              onTap: isFailed
+                  ? null
+                  : () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NoteDetailPage(
+                            transcription: transcription,
+                          ),
+                        ),
+                      );
+                    },
+              onEditTitle: isFailed
+                  ? null
+                  : () {
+                      _showEditTitleDialog(context, transcription);
+                    },
+              onDelete: () {
+                _showDeleteConfirmationDialog(context, transcription);
+              },
+              onCreateFlashcards: isFailed
+                  ? null
+                  : () {
+                      _generateFlashcards(transcription.id, 'transcription');
+                    },
+              onRetry: isFailed
+                  ? () {
+                      context
+                          .read<TranscriptionBloc>()
+                          .add(RetryFailedTranscription(transcription));
+                    }
+                  : null,
+              onFormatNote: isUnformatted
+                  ? () {
+                      context
+                          .read<TranscriptionBloc>()
+                          .add(FormatTranscriptionNote(transcription.id));
+                    }
+                  : null,
+            );
           },
-          onCreateFlashcards: isFailed
-              ? null
-              : () {
-                  _generateFlashcards(transcription.id, 'transcription');
-                },
-          onRetry: isFailed
-              ? () {
-                  context
-                      .read<TranscriptionBloc>()
-                      .add(RetryFailedTranscription(transcription));
-                }
-              : null,
         );
       },
     );
@@ -867,28 +913,70 @@ class _ModeToggle extends StatelessWidget {
         color: _kCardColor,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: SwitchListTile.adaptive(
-        value: value,
-        onChanged: (isOn) {
-          context.read<TranscriptionBloc>().add(ToggleOfflinePreference(isOn));
-        },
-        title: const Text(
-          'Use offline mode',
-          style: TextStyle(
-            color: _kWhite,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile.adaptive(
+            value: value,
+            onChanged: (isOn) {
+              context
+                  .read<TranscriptionBloc>()
+                  .add(ToggleOfflinePreference(isOn));
+            },
+            title: Row(
+              children: [
+                Icon(
+                  value ? Icons.cloud_off : Icons.cloud,
+                  color: value ? _kYellow : _kAccentBlue,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  value ? 'Offline mode enabled' : 'Offline mode disabled',
+                  style: const TextStyle(
+                    color: _kWhite,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            subtitle: Text(
+              value
+                  ? 'Notes are processed on-device. You\'ll get raw transcription text which you can format later.'
+                  : 'Notes are processed in the cloud with AI-powered formatting for structured, organized notes.',
+              style: const TextStyle(
+                color: _kLightGray,
+                fontSize: 14,
+              ),
+            ),
+            activeColor: _kYellow,
+            contentPadding: EdgeInsets.zero,
           ),
-        ),
-        subtitle: const Text(
-          'Offline mode let\'s you take notes without internet connection. You are given a raw note, compared to the online mode that structures the note for you.',
-          style: TextStyle(
-            color: _kLightGray,
-            fontSize: 14,
-          ),
-        ),
-        activeColor: _kAccentBlue,
-        contentPadding: EdgeInsets.zero,
+          if (value) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _kYellow.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _kYellow.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: _kYellow),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Tip: You can format offline notes later using the "Format Note" button when viewing your note.',
+                      style: TextStyle(color: _kYellow, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -945,6 +1033,9 @@ class _CloudTranscriptionStatus extends StatelessWidget {
     final label = _labelForStatus(job);
     final progress =
         job.progress != null ? job.progress!.clamp(0, 100) / 100 : null;
+    final stepInfo = _getStepInfo(job.status);
+    final estimatedTimeRemaining = _estimateTimeRemaining(job);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -954,6 +1045,9 @@ class _CloudTranscriptionStatus extends StatelessWidget {
           label: label,
         ),
         const SizedBox(height: 12),
+        // Step indicator
+        _buildStepIndicator(stepInfo.currentStep, stepInfo.totalSteps, color),
+        const SizedBox(height: 8),
         LinearProgressIndicator(
           value: progress,
           minHeight: 6,
@@ -961,12 +1055,29 @@ class _CloudTranscriptionStatus extends StatelessWidget {
           valueColor: AlwaysStoppedAnimation<Color>(color),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'You can safely leave this screen; progress is tracked in Recent Transcriptions.',
-          style: TextStyle(
-            color: _kLightGray,
-            fontSize: 12,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Flexible(
+              child: Text(
+                'You can safely leave this screen',
+                style: TextStyle(
+                  color: _kLightGray,
+                  fontSize: 12,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (estimatedTimeRemaining != null)
+              Text(
+                estimatedTimeRemaining,
+                style: const TextStyle(
+                  color: _kLightGray,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 12),
         if (job.noteStatus == 'error' && job.noteError != null)
@@ -1027,6 +1138,122 @@ class _CloudTranscriptionStatus extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Widget _buildStepIndicator(int currentStep, int totalSteps, Color color) {
+    return Row(
+      children: List.generate(totalSteps, (index) {
+        final stepNumber = index + 1;
+        final isCompleted = stepNumber < currentStep;
+        final isCurrent = stepNumber == currentStep;
+
+        return Expanded(
+          child: Row(
+            children: [
+              if (index > 0)
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    color: isCompleted || isCurrent
+                        ? color
+                        : color.withOpacity(0.2),
+                  ),
+                ),
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isCompleted
+                      ? color
+                      : isCurrent
+                          ? color.withOpacity(0.3)
+                          : color.withOpacity(0.1),
+                  border: isCurrent ? Border.all(color: color, width: 2) : null,
+                ),
+                child: Center(
+                  child: isCompleted
+                      ? Icon(Icons.check, size: 12, color: Colors.white)
+                      : Text(
+                          '$stepNumber',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isCurrent ? color : color.withOpacity(0.5),
+                          ),
+                        ),
+                ),
+              ),
+              if (index < totalSteps - 1)
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    color: isCompleted ? color : color.withOpacity(0.2),
+                  ),
+                ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  static ({int currentStep, int totalSteps}) _getStepInfo(
+      TranscriptionJobStatus status) {
+    // Steps: 1. Upload, 2. Transcribe, 3. Generate Notes
+    switch (status) {
+      case TranscriptionJobStatus.pending:
+      case TranscriptionJobStatus.uploading:
+        return (currentStep: 1, totalSteps: 3);
+      case TranscriptionJobStatus.uploaded:
+      case TranscriptionJobStatus.processing:
+        return (currentStep: 2, totalSteps: 3);
+      case TranscriptionJobStatus.generatingNote:
+        return (currentStep: 3, totalSteps: 3);
+      case TranscriptionJobStatus.completed:
+        return (currentStep: 4, totalSteps: 3); // All complete
+      case TranscriptionJobStatus.error:
+        return (currentStep: 0, totalSteps: 3); // Error state
+    }
+  }
+
+  static String? _estimateTimeRemaining(TranscriptionJob job) {
+    // Estimate based on step and progress
+    // Average times: Upload ~20s, Transcribe ~60s, Notes ~30s
+    final progress = job.progress?.clamp(0, 100) ?? 0;
+
+    int remainingSeconds;
+    switch (job.status) {
+      case TranscriptionJobStatus.pending:
+      case TranscriptionJobStatus.uploading:
+        // Upload + Transcribe + Notes remaining
+        final uploadRemaining = ((100 - progress) / 100 * 20).round();
+        remainingSeconds = uploadRemaining + 60 + 30;
+        break;
+      case TranscriptionJobStatus.uploaded:
+      case TranscriptionJobStatus.processing:
+        // Transcribe + Notes remaining
+        final transcribeRemaining = ((100 - progress) / 100 * 60).round();
+        remainingSeconds = transcribeRemaining + 30;
+        break;
+      case TranscriptionJobStatus.generatingNote:
+        // Notes remaining
+        final notesRemaining = ((100 - progress) / 100 * 30).round();
+        remainingSeconds = notesRemaining;
+        break;
+      case TranscriptionJobStatus.completed:
+      case TranscriptionJobStatus.error:
+        return null;
+    }
+
+    if (remainingSeconds < 10) {
+      return 'Almost done...';
+    } else if (remainingSeconds < 60) {
+      return '~${remainingSeconds}s remaining';
+    } else {
+      final minutes = (remainingSeconds / 60).ceil();
+      return '~${minutes}min remaining';
+    }
   }
 
   static String _labelForStatus(TranscriptionJob job) {
