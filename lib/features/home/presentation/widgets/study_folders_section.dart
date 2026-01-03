@@ -7,17 +7,19 @@ import '../../../../features/study_folders/presentation/bloc/study_folders_state
 import 'dashboard_folder_card.dart';
 
 /// Widget that displays study folders in a 3-column grid layout.
-/// 
+///
 /// The first item is always the "Create folder" tile.
 class StudyFoldersSection extends StatelessWidget {
   const StudyFoldersSection({
     super.key,
     required this.onCreateFolderTap,
     required this.onFolderTap,
+    this.searchQuery = '',
   });
 
   final VoidCallback onCreateFolderTap;
   final Function(String folderId, String folderName) onFolderTap;
+  final String searchQuery;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +50,14 @@ class StudyFoldersSection extends StatelessWidget {
         }
 
         // Get folders from state (empty list if initial/loading)
-        final folders = state.folders;
+        var folders = state.folders;
+
+        // Filter folders based on search query if provided
+        if (searchQuery.isNotEmpty) {
+          folders = folders.where((folder) {
+            return folder.name.toLowerCase().contains(searchQuery.toLowerCase());
+          }).toList();
+        }
 
         // Total items: 1 for create tile + folders count
         final itemCount = 1 + folders.length;

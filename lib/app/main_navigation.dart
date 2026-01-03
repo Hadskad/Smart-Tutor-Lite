@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../features/home/presentation/pages/home_dashboard_page.dart';
 import '../features/timetable/presentation/pages/timetable_page.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
-import '../features/profile/presentation/pages/profile_page.dart';
 
 // --- Color Palette (matching home dashboard) ---
 const Color _kBackgroundColor = Color(0xFF1E1E1E);
@@ -25,7 +24,6 @@ class _MainNavigationState extends State<MainNavigation> {
     HomeDashboardPage(),
     TimetablePage(),
     SettingsPage(),
-    ProfilePage(),
   ];
 
   @override
@@ -95,12 +93,6 @@ class _CustomCircularNavBar extends StatelessWidget {
                 selectedIcon: Icons.settings,
                 isSelected: currentIndex == 2,
                 onTap: () => onTap(2),
-              ),
-              _NavIconButton(
-                icon: Icons.person_outline,
-                selectedIcon: Icons.person,
-                isSelected: currentIndex == 3,
-                onTap: () => onTap(3),
               ),
             ],
           ),

@@ -65,7 +65,16 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
       );
 
       // Check if cancelled during operation
+      // Ensure cancelled state is emitted to avoid UI stuck in loading state
       if (_isCancellationRequested) {
+        if (state is! SummaryCancelled) {
+          emit(
+            SummaryCancelled(
+              message: 'Summarization cancelled',
+              summaries: List.unmodifiable(_summaries),
+            ),
+          );
+        }
         return;
       }
 
@@ -73,7 +82,7 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
         (failure) {
           final message = failure.message ?? 'Failed to summarize text';
           // Check if request was queued
-          if (message.contains('queued') || message.contains('Queued')) {
+          if (message.toLowerCase().contains('queued')) {
             emit(
               SummaryQueued(
                 message: message,
@@ -119,7 +128,16 @@ class SummaryBloc extends Bloc<SummaryEvent, SummaryState> {
       );
 
       // Check if cancelled during operation
+      // Ensure cancelled state is emitted to avoid UI stuck in loading state
       if (_isCancellationRequested) {
+        if (state is! SummaryCancelled) {
+          emit(
+            SummaryCancelled(
+              message: 'Summarization cancelled',
+              summaries: List.unmodifiable(_summaries),
+            ),
+          );
+        }
         return;
       }
 

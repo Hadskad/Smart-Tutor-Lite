@@ -279,7 +279,7 @@ class _FlashcardsListState extends State<_FlashcardsList> {
                   _EmptyStateActionButton(
                     icon: Icons.summarize,
                     label: 'Summaries',
-                    onTap: () => Navigator.pushNamed(context, '/summary'),
+                    onTap: () => Navigator.pushNamed(context, '/summarization'),
                   ),
                 ],
               ),

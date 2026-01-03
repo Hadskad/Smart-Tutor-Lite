@@ -28,6 +28,8 @@ class HomeDashboardPage extends StatefulWidget {
 
 class _HomeDashboardPageState extends State<HomeDashboardPage> {
   late final StudyFoldersBloc _studyFoldersBloc;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -39,6 +41,7 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     // Don't close the bloc - it's a singleton shared across pages
     super.dispose();
   }
@@ -84,9 +87,8 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 5.0),
                 child: Column(
                   children: [
-                    const SizedBox(height: 16.0),
-                    const _SearchBarWidget(),
-                    const SizedBox(height: 32.0),
+               
+                    const SizedBox(height: 20.0),
                     SizedBox(
                       height: MediaQuery.of(context).size.height * 0.5,
                       width: double.infinity,
@@ -133,9 +135,10 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
                                 fontSize: 22)),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 10),
                     // Study Folders Grid Section
                     StudyFoldersSection(
+                      searchQuery: _searchQuery,
                       onCreateFolderTap: () {
                         showDialog(
                           context: context,
@@ -242,39 +245,7 @@ class _ProfileIconButton extends StatelessWidget {
   }
 }
 
-// --- 3. Search Bar Widget ---
 
-class _SearchBarWidget extends StatelessWidget {
-  const _SearchBarWidget({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-      decoration: BoxDecoration(
-        color: _kCardColor.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(16.0),
-        border: Border.all(color: _kCardColor, width: 1.0),
-      ),
-      child: Row(
-        children: const [
-          Icon(Icons.search, color: _kAccentBlue),
-          SizedBox(width: 12.0),
-          Expanded(
-            child: Text(
-              'What are you mastering today?',
-              style: TextStyle(
-                color: _kLightGray,
-                fontSize: 16,
-              ),
-            ),
-          ),
-          Icon(Icons.mic_none, color: _kAccentBlue),
-        ],
-      ),
-    );
-  }
-}
 
 // --- 3. Feature Cards Grid ---
 

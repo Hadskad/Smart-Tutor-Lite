@@ -41,6 +41,7 @@ class _QuizCreationPageState extends State<QuizCreationPage>
   List<Quiz> _previousQuizzes = [];
   bool _loadingSources = true;
   bool _loadingQuizzes = true;
+  String? _deletingQuizId; // Track quiz being deleted
 
   @override
   void initState() {
@@ -124,7 +125,24 @@ class _QuizCreationPageState extends State<QuizCreationPage>
       final quizRepo = getIt<QuizRepository>();
       final result = await quizRepo.getAllQuizzes();
       result.fold(
-        (_) => {},
+        (failure) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'Failed to load quiz history. Pull down to refresh.',
+                ),
+                backgroundColor: _kAccentCoral,
+                behavior: SnackBarBehavior.floating,
+                action: SnackBarAction(
+                  label: 'Retry',
+                  textColor: _kWhite,
+                  onPressed: _loadPreviousQuizzes,
+                ),
+              ),
+            );
+          }
+        },
         (quizzes) {
           setState(() {
             _previousQuizzes = quizzes;
@@ -132,7 +150,22 @@ class _QuizCreationPageState extends State<QuizCreationPage>
         },
       );
     } catch (e) {
-      // Handle error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'An unexpected error occurred while loading quiz history.',
+            ),
+            backgroundColor: _kAccentCoral,
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: _kWhite,
+              onPressed: _loadPreviousQuizzes,
+            ),
+          ),
+        );
+      }
     } finally {
       setState(() => _loadingQuizzes = false);
     }
@@ -210,20 +243,56 @@ class _QuizCreationPageState extends State<QuizCreationPage>
       body: SafeArea(
         child: BlocConsumer<QuizBloc, QuizState>(
           listener: (context, state) {
-            if (state is QuizError) {
+            // Handle quiz deletion success
+            if (state is QuizInitial && _deletingQuizId != null) {
+              final deletedId = _deletingQuizId;
+              setState(() {
+                _previousQuizzes.removeWhere((q) => q.id == deletedId);
+                _deletingQuizId = null;
+              });
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(_getErrorMessage(state.message)),
-                  backgroundColor: _kAccentCoral,
+                const SnackBar(
+                  content: Text('Quiz deleted successfully'),
+                  backgroundColor: _kAccentBlue,
                   behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 4),
-                  action: SnackBarAction(
-                    label: 'Retry',
-                    textColor: _kWhite,
-                    onPressed: _generateQuiz,
-                  ),
                 ),
               );
+            }
+            // Handle errors (including deletion failures)
+            else if (state is QuizError) {
+              // Check if this was a deletion error
+              final isDeletionError = _deletingQuizId != null;
+
+              if (isDeletionError) {
+                setState(() => _deletingQuizId = null);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      state.message.contains('delete')
+                          ? state.message
+                          : 'Failed to delete quiz. Please try again.',
+                    ),
+                    backgroundColor: _kAccentCoral,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 4),
+                  ),
+                );
+              } else {
+                // Quiz generation error
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(_getErrorMessage(state.message)),
+                    backgroundColor: _kAccentCoral,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 4),
+                    action: SnackBarAction(
+                      label: 'Retry',
+                      textColor: _kWhite,
+                      onPressed: _generateQuiz,
+                    ),
+                  ),
+                );
+              }
             } else if (state is QuizQueued) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -352,6 +421,8 @@ class _QuizCreationPageState extends State<QuizCreationPage>
   }
 
   Widget _buildQuizHistoryCard(Quiz quiz) {
+    final isDeleting = _deletingQuizId == quiz.id;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -362,86 +433,115 @@ class _QuizCreationPageState extends State<QuizCreationPage>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            // Load and take the quiz
-            context.read<QuizBloc>().add(LoadQuizEvent(quiz.id));
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: _kAccentBlue.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
+          onTap: isDeleting
+              ? null
+              : () {
+                  // Load and take the quiz
+                  context.read<QuizBloc>().add(LoadQuizEvent(quiz.id));
+                },
+          child: Opacity(
+            opacity: isDeleting ? 0.5 : 1.0,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: _kAccentBlue.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: isDeleting
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _kAccentBlue,
+                              ),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.quiz,
+                            color: _kAccentBlue,
+                            size: 24,
+                          ),
                   ),
-                  child: const Icon(
-                    Icons.quiz,
-                    color: _kAccentBlue,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        quiz.title,
-                        style: const TextStyle(
-                          color: _kWhite,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          quiz.title,
+                          style: const TextStyle(
+                            color: _kWhite,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            quiz.sourceType == 'transcription'
-                                ? Icons.mic
-                                : Icons.summarize,
-                            size: 14,
-                            color: _kDarkGray,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${quiz.questions.length} questions',
-                            style: const TextStyle(
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              quiz.sourceType == 'transcription'
+                                  ? Icons.mic
+                                  : Icons.summarize,
+                              size: 14,
                               color: _kDarkGray,
-                              fontSize: 12,
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            DateFormat('MMM d, y').format(quiz.createdAt),
-                            style: const TextStyle(
-                              color: _kDarkGray,
-                              fontSize: 12,
+                            const SizedBox(width: 4),
+                            Text(
+                              '${quiz.questions.length} questions',
+                              style: const TextStyle(
+                                color: _kDarkGray,
+                                fontSize: 12,
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 12),
+                            Text(
+                              DateFormat('MMM d, y').format(quiz.createdAt),
+                              style: const TextStyle(
+                                color: _kDarkGray,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isDeleting)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'Deleting...',
+                        style: TextStyle(
+                          color: _kAccentCoral,
+                          fontSize: 12,
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: _kAccentCoral,
-                    size: 20,
-                  ),
-                  onPressed: () => _showDeleteConfirmation(quiz),
-                ),
-                const Icon(
-                  Icons.chevron_right,
-                  color: _kDarkGray,
-                ),
-              ],
+                    )
+                  else ...[
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: _kAccentCoral,
+                        size: 20,
+                      ),
+                      onPressed: () => _showDeleteConfirmation(quiz),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      color: _kDarkGray,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -470,17 +570,8 @@ class _QuizCreationPageState extends State<QuizCreationPage>
           ElevatedButton(
             onPressed: () {
               Navigator.pop(dialogContext);
+              setState(() => _deletingQuizId = quiz.id);
               context.read<QuizBloc>().add(DeleteQuizEvent(quiz.id));
-              setState(() {
-                _previousQuizzes.removeWhere((q) => q.id == quiz.id);
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Quiz deleted'),
-                  backgroundColor: _kAccentBlue,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: _kAccentCoral,

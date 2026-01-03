@@ -2,6 +2,9 @@
 
 An offline-first, AI-powered study assistant for mobile devices. Record and convert recorded lectures to well structured notes, summarize notes & PDFs, generate quizzes, convert PDFs to audio, and support study mode - all optimized for ARM architecture.
 
+
+Note, This application is still in development. Some screens and functionalities are not fully setup. The main aim is for the judges to see that all the proposed features are working.
+
 ## Features
 
 - **On-Device Transcription**: Record and transcribe lectures using Whisper.cpp (runs entirely offline), or optionally with the online mode, for better structured notes.

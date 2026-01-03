@@ -16,6 +16,65 @@ export interface OperationResult {
 }
 
 /**
+ * Cancel a long-running operation
+ * This stops the operation and releases resources
+ * @param operationName - The operation name to cancel
+ * @returns true if cancelled successfully, false otherwise
+ */
+export async function cancelOperation(
+  operationName: string,
+): Promise<boolean> {
+  try {
+    const projectNumber = getGCPProjectNumber();
+
+    if (!/^\d+$/.test(projectNumber)) {
+      throw new Error('Invalid GCP project number');
+    }
+
+    const auth = new GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    });
+    const authClient = await auth.getClient();
+
+    // Normalize operation name
+    let fullOperationName = operationName;
+    if (!operationName.startsWith('projects/')) {
+      const operationId = operationName.split('/').pop();
+      fullOperationName = `projects/${projectNumber}/locations/global/operations/${operationId}`;
+    }
+
+    const apiBaseUrl = 'https://texttospeech.googleapis.com/v1';
+    const { token } = await authClient.getAccessToken();
+    
+    if (!token) {
+      throw new Error('Failed to obtain access token');
+    }
+
+    const response = await fetch(`${apiBaseUrl}/${fullOperationName}:cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      console.log(`Successfully cancelled operation: ${fullOperationName}`);
+      return true;
+    } else {
+      const text = await response.text();
+      console.warn(
+        `Failed to cancel operation ${fullOperationName}: HTTP ${response.status} - ${text}`,
+      );
+      return false;
+    }
+  } catch (error) {
+    console.warn(`Error cancelling operation ${operationName}:`, error);
+    return false;
+  }
+}
+
+/**
  * Poll a Google Cloud long-running operation until it completes
  * Uses REST API + exponential backoff with jitter
  *

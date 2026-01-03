@@ -10,7 +10,7 @@ import {
 } from '../utils/storage-helpers';
 import { textToSpeechLong, synthesizeLongAudio } from '../utils/google-tts-helpers';
 import { VoiceId, DEFAULT_VOICE_NAME } from '../config/google-tts';
-import { pollOperationUntilDone } from '../utils/operation-poller';
+import { pollOperationUntilDone, cancelOperation } from '../utils/operation-poller';
 import {
   uploadTextToGCS,
   generateGCSOutputUri,
@@ -106,7 +106,7 @@ app.delete('/:id', async (req: Request, res: Response) => {
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      res.status(404).json({ error: 'TTS job not found' });
+      res.status(404).json({ error: 'Audio file not found' });
       return;
     }
 
@@ -124,6 +124,46 @@ app.delete('/:id', async (req: Request, res: Response) => {
         console.warn(
           `[Job ${id}] Failed to delete audio file from storage:`,
           storageError,
+        );
+      }
+    }
+
+    // Clean up GCS temporary files if async batch processing was used
+    // These files are only created for large texts (> 100K chars)
+    if (jobData?.operationName) {
+      console.log(
+        `[Job ${id}] Async batch processing detected (operationName: ${jobData.operationName}). ` +
+        `Cancelling operation and cleaning up GCS temporary files...`,
+      );
+      
+      // Cancel the running operation to free up resources
+      // This is best-effort - operation may already be completed or failed
+      if (jobData.status === 'processing') {
+        await cancelOperation(jobData.operationName).catch((error) => {
+          console.warn(`[Job ${id}] Failed to cancel operation:`, error);
+        });
+      }
+      
+      try {
+        const inputGcsUri = `gs://${admin.storage().bucket().name}/tts-input/${id}-input.txt`;
+        const outputGcsUri = generateGCSOutputUri(id);
+        
+        // Delete GCS files in parallel
+        await Promise.allSettled([
+          deleteGCSFile(inputGcsUri).catch((error) => {
+            console.warn(`[Job ${id}] Failed to delete input GCS file:`, error);
+          }),
+          deleteGCSFile(outputGcsUri).catch((error) => {
+            console.warn(`[Job ${id}] Failed to delete output GCS file:`, error);
+          }),
+        ]);
+        
+        console.log(`[Job ${id}] GCS temporary files cleanup completed`);
+      } catch (gcsError) {
+        // Log but don't fail - GCS cleanup is best-effort
+        console.warn(
+          `[Job ${id}] Error during GCS cleanup:`,
+          gcsError,
         );
       }
     }
