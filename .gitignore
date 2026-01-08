@@ -77,3 +77,7 @@ ios/Flutter/flutter_export_environment.sh
 service-account.json
 *-service-account.json
 *.json.key
+
+# Windows reserved filename (cannot be handled by Git on Windows)
+# Ignore entire ggml third-party directory due to problematic 'nul' file
+android/app/src/main/cpp/third_party/ggml/

@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
-import { generateFlashcards } from '../utils/gemini-helpers';
+import { generateFlashcards } from '../utils/openai-helpers';
 import { saveFlashcards } from '../utils/firestore-helpers';
 import { getTranscription } from '../utils/firestore-helpers';
 import { db } from '../config/firebase-admin';
@@ -201,7 +201,6 @@ app.post('/', async (req: Request, res: Response) => {
         flashcardsData = await generateFlashcards({
           content,
           numFlashcards,
-          signal,
         });
         // Success - break out of retry loop
         break;

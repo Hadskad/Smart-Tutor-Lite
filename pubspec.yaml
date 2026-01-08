@@ -39,6 +39,7 @@ dependencies:
   # File handling
   file_picker: ^10.3.7
   path: ^1.8.3
+  image_picker: ^1.0.7
   
   # Audio
   record: ^6.1.2
@@ -68,6 +69,7 @@ dependencies:
   firebase_storage: ^13.0.4
   firebase_auth: ^6.1.2
   cloud_firestore: ^6.1.0
+  google_sign_in: ^6.2.1
 
 dev_dependencies:
   flutter_test:

@@ -2,8 +2,8 @@
 class AppConstants {
   AppConstants._();
 
-  static const String whisperDefaultModel = 'assets/models/ggml-base.en.bin';
-  static const String whisperFastModel = 'assets/models/ggml-tiny.en.bin';
+  static const String whisperDefaultModel = 'assets/models/ggml-base.en-q5_1.bin';
+  static const String whisperFastModel = 'assets/models/ggml-tiny.en-q5_1.bin';
   static const Duration apiTimeout = Duration(seconds: 30);
   static const Duration cacheTtl = Duration(minutes: 30);
   static const String dateFormat = 'yyyy-MM-dd HH:mm';

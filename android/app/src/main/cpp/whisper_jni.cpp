@@ -17,11 +17,8 @@
 
 #include "whisper_wrapper.h"
 
-#ifndef __has_include
-#define __has_include(x) 0
-#endif
-
-#if __has_include("whisper.h")
+// whisper.cpp v1.8.2 include structure
+#ifdef SMART_TUTOR_HAS_WHISPER
 #define SMART_TUTOR_HAS_NATIVE_WHISPER 1
 #include "whisper.h"
 #else

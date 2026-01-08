@@ -12,8 +12,10 @@ import 'package:battery_plus/battery_plus.dart' as _i117;
 import 'package:cloud_firestore/cloud_firestore.dart' as _i974;
 import 'package:connectivity_plus/connectivity_plus.dart' as _i895;
 import 'package:dio/dio.dart' as _i361;
+import 'package:firebase_auth/firebase_auth.dart' as _i59;
 import 'package:firebase_storage/firebase_storage.dart' as _i457;
 import 'package:get_it/get_it.dart' as _i174;
+import 'package:google_sign_in/google_sign_in.dart' as _i116;
 import 'package:hive/hive.dart' as _i979;
 import 'package:hive_flutter/hive_flutter.dart' as _i986;
 import 'package:injectable/injectable.dart' as _i526;
@@ -27,6 +29,38 @@ import 'package:smart_tutor_lite/core/services/audio_file_manager.dart'
 import 'package:smart_tutor_lite/core/sync/queue_sync_service.dart' as _i545;
 import 'package:smart_tutor_lite/core/utils/logger.dart' as _i496;
 import 'package:smart_tutor_lite/core/utils/performance_monitor.dart' as _i366;
+import 'package:smart_tutor_lite/features/auth/data/datasources/auth_local_datasource.dart'
+    as _i222;
+import 'package:smart_tutor_lite/features/auth/data/datasources/auth_remote_datasource.dart'
+    as _i236;
+import 'package:smart_tutor_lite/features/auth/data/repositories/auth_repository_impl.dart'
+    as _i786;
+import 'package:smart_tutor_lite/features/auth/domain/repositories/auth_repository.dart'
+    as _i621;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/check_auth_status.dart'
+    as _i27;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/check_email_verified.dart'
+    as _i367;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/delete_account.dart'
+    as _i726;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/send_email_verification.dart'
+    as _i596;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/send_password_reset_email.dart'
+    as _i688;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/sign_in_with_email.dart'
+    as _i487;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/sign_in_with_google.dart'
+    as _i1062;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/sign_out.dart'
+    as _i849;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/sign_up_with_email.dart'
+    as _i647;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/update_profile_photo.dart'
+    as _i532;
+import 'package:smart_tutor_lite/features/auth/domain/usecases/update_username.dart'
+    as _i992;
+import 'package:smart_tutor_lite/features/auth/presentation/bloc/auth_bloc.dart'
+    as _i947;
 import 'package:smart_tutor_lite/features/quiz/data/datasources/quiz_queue_local_datasource.dart'
     as _i96;
 import 'package:smart_tutor_lite/features/quiz/data/datasources/quiz_remote_datasource.dart'
@@ -168,6 +202,8 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i974.FirebaseFirestore>(() => externalModule.firestore());
     gh.lazySingleton<_i457.FirebaseStorage>(
         () => externalModule.firebaseStorage());
+    gh.lazySingleton<_i59.FirebaseAuth>(() => externalModule.firebaseAuth());
+    gh.lazySingleton<_i116.GoogleSignIn>(() => externalModule.googleSignIn());
     gh.lazySingleton<_i99.PerformanceBridge>(() => _i99.PerformanceBridge());
     gh.lazySingleton<_i490.AudioFileManager>(
         () => _i490.AudioFileManager(gh<_i460.SharedPreferences>()));
@@ -194,10 +230,19 @@ extension GetItInjectableX on _i174.GetIt {
               gh<_i974.FirebaseFirestore>(),
               gh<_i457.FirebaseStorage>(),
             ));
+    gh.lazySingleton<_i222.AuthLocalDataSource>(() => _i222.AuthLocalDataSource(
+        sharedPreferences: gh<_i460.SharedPreferences>()));
     gh.lazySingleton<_i216.FolderMaterialLocalDataSource>(() =>
         _i216.FolderMaterialLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i777.FlashcardLocalDataSource>(
         () => _i777.FlashcardLocalDataSourceImpl(gh<_i979.HiveInterface>()));
+    gh.lazySingleton<_i236.AuthRemoteDataSource>(
+        () => _i236.AuthRemoteDataSource(
+              firebaseAuth: gh<_i59.FirebaseAuth>(),
+              googleSignIn: gh<_i116.GoogleSignIn>(),
+              firestore: gh<_i974.FirebaseFirestore>(),
+              firebaseStorage: gh<_i457.FirebaseStorage>(),
+            ));
     gh.lazySingleton<_i588.TranscriptionPreferencesRepository>(() =>
         _i671.TranscriptionPreferencesRepositoryImpl(
             gh<_i287.TranscriptionPreferencesLocalDataSource>()));
@@ -212,6 +257,10 @@ extension GetItInjectableX on _i174.GetIt {
         () => _i38.SummaryQueueLocalDataSourceImpl(gh<_i979.HiveInterface>()));
     gh.lazySingleton<_i756.WhisperLifecycleObserver>(
         () => _i756.WhisperLifecycleObserver(gh<_i687.WhisperFfi>()));
+    gh.lazySingleton<_i621.AuthRepository>(() => _i786.AuthRepositoryImpl(
+          remoteDataSource: gh<_i236.AuthRemoteDataSource>(),
+          localDataSource: gh<_i222.AuthLocalDataSource>(),
+        ));
     gh.lazySingleton<_i361.Dio>(
         () => externalModule.dio(gh<_i496.AppLogger>()));
     gh.lazySingleton<_i440.NetworkInfo>(() => _i440.NetworkInfoImpl(
@@ -223,6 +272,41 @@ extension GetItInjectableX on _i174.GetIt {
               gh<_i368.StudyFolderLocalDataSource>(),
               gh<_i216.FolderMaterialLocalDataSource>(),
             ));
+    gh.factory<_i27.CheckAuthStatus>(
+        () => _i27.CheckAuthStatus(gh<_i621.AuthRepository>()));
+    gh.factory<_i367.CheckEmailVerified>(
+        () => _i367.CheckEmailVerified(gh<_i621.AuthRepository>()));
+    gh.factory<_i726.DeleteAccount>(
+        () => _i726.DeleteAccount(gh<_i621.AuthRepository>()));
+    gh.factory<_i596.SendEmailVerification>(
+        () => _i596.SendEmailVerification(gh<_i621.AuthRepository>()));
+    gh.factory<_i688.SendPasswordResetEmail>(
+        () => _i688.SendPasswordResetEmail(gh<_i621.AuthRepository>()));
+    gh.factory<_i487.SignInWithEmail>(
+        () => _i487.SignInWithEmail(gh<_i621.AuthRepository>()));
+    gh.factory<_i1062.SignInWithGoogle>(
+        () => _i1062.SignInWithGoogle(gh<_i621.AuthRepository>()));
+    gh.factory<_i849.SignOut>(() => _i849.SignOut(gh<_i621.AuthRepository>()));
+    gh.factory<_i647.SignUpWithEmail>(
+        () => _i647.SignUpWithEmail(gh<_i621.AuthRepository>()));
+    gh.factory<_i532.UpdateProfilePhoto>(
+        () => _i532.UpdateProfilePhoto(gh<_i621.AuthRepository>()));
+    gh.factory<_i992.UpdateUsername>(
+        () => _i992.UpdateUsername(gh<_i621.AuthRepository>()));
+    gh.factory<_i947.AuthBloc>(() => _i947.AuthBloc(
+          gh<_i27.CheckAuthStatus>(),
+          gh<_i487.SignInWithEmail>(),
+          gh<_i647.SignUpWithEmail>(),
+          gh<_i1062.SignInWithGoogle>(),
+          gh<_i849.SignOut>(),
+          gh<_i688.SendPasswordResetEmail>(),
+          gh<_i596.SendEmailVerification>(),
+          gh<_i367.CheckEmailVerified>(),
+          gh<_i532.UpdateProfilePhoto>(),
+          gh<_i992.UpdateUsername>(),
+          gh<_i726.DeleteAccount>(),
+          gh<_i496.AppLogger>(),
+        ));
     gh.lazySingleton<_i783.StudyFoldersBloc>(
         () => _i783.StudyFoldersBloc(gh<_i459.StudyFolderRepository>()));
     gh.lazySingleton<_i80.TranscriptionJobRepository>(

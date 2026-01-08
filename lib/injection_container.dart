@@ -2,8 +2,10 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:get_it/get_it.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:injectable/injectable.dart';
 import 'package:logger/logger.dart';
@@ -51,6 +53,14 @@ abstract class ExternalModule {
 
   @lazySingleton
   FirebaseStorage firebaseStorage() => FirebaseStorage.instance;
+
+  @lazySingleton
+  FirebaseAuth firebaseAuth() => FirebaseAuth.instance;
+
+  @lazySingleton
+  GoogleSignIn googleSignIn() => GoogleSignIn(
+        scopes: ['email', 'profile'],
+      );
 
   @preResolve
   Future<HiveInterface> hive() async {

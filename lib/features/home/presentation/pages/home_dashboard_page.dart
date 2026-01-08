@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:smart_tutor_lite/app/routes.dart';
 import 'package:smart_tutor_lite/injection_container.dart';
+import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
+import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../../../../features/study_folders/presentation/bloc/study_folders_bloc.dart';
 import '../../../../features/study_folders/presentation/bloc/study_folders_event.dart';
 import '../../../../features/study_folders/presentation/bloc/study_folders_state.dart';
@@ -73,9 +75,24 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
             actions: [
               Padding(
                 padding: const EdgeInsets.only(right: 16.0),
-                child: _ProfileIconButton(
-                  onTap: () {
-                    Navigator.pushNamed(context, AppRoutes.profile);
+                child: BlocBuilder<AuthBloc, AuthState>(
+                  builder: (context, authState) {
+                    String? photoUrl;
+                    if (authState is Authenticated) {
+                      photoUrl = authState.user.photoUrl;
+                    } else if (authState is EmailNotVerified) {
+                      photoUrl = authState.user.photoUrl;
+                    } else if (authState is ProfilePhotoUpdating) {
+                      photoUrl = authState.user.photoUrl;
+                    } else if (authState is ProfileNameUpdating) {
+                      photoUrl = authState.user.photoUrl;
+                    }
+                    return _ProfileIconButton(
+                      photoUrl: photoUrl,
+                      onTap: () {
+                        Navigator.pushNamed(context, AppRoutes.profile);
+                      },
+                    );
                   },
                 ),
               ),
@@ -206,9 +223,13 @@ class _HeaderTitle extends StatelessWidget {
 // --- 2. Profile Icon Button (for AppBar) ---
 
 class _ProfileIconButton extends StatelessWidget {
-  const _ProfileIconButton({required this.onTap});
+  const _ProfileIconButton({
+    required this.onTap,
+    this.photoUrl,
+  });
 
   final VoidCallback onTap;
+  final String? photoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -225,20 +246,25 @@ class _ProfileIconButton extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: _kAccentBlue.withOpacity(0.5),
+              color: _kAccentBlue.withValues(alpha: 0.5),
               blurRadius: 10,
               spreadRadius: 1,
             ),
           ],
         ),
-        child: const CircleAvatar(
+        child: CircleAvatar(
           radius: 20,
           backgroundColor: _kCardColor,
-          child: Icon(
-            Icons.person_outlined,
-            color: _kWhite,
-            size: 24,
-          ),
+          backgroundImage: photoUrl != null && photoUrl!.isNotEmpty
+              ? NetworkImage(photoUrl!)
+              : null,
+          child: photoUrl == null || photoUrl!.isEmpty
+              ? const Icon(
+                  Icons.person_outlined,
+                  color: _kWhite,
+                  size: 24,
+                )
+              : null,
         ),
       ),
     );

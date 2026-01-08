@@ -13,13 +13,10 @@
 #include <string>
 #include <vector>
 
-#ifndef __has_include
-#define __has_include(x) 0
-#endif
-
-#if __has_include("third_party/whisper/whisper.h")
+// whisper.cpp v1.6.2 flat structure (iOS)
+#if __has_include("third_party/whisper.h")
 #define SMART_TUTOR_HAS_NATIVE_WHISPER 1
-#include "third_party/whisper/whisper.h"
+#include "third_party/whisper.h"
 #elif __has_include("whisper.h")
 #define SMART_TUTOR_HAS_NATIVE_WHISPER 1
 #include "whisper.h"
@@ -27,8 +24,11 @@
 #define SMART_TUTOR_HAS_NATIVE_WHISPER 0
 #endif
 
-#if SMART_TUTOR_HAS_NATIVE_WHISPER && __has_include("third_party/whisper/whisper.cpp")
-#include "third_party/whisper/whisper.cpp"
+// Include whisper.cpp implementation for static compilation
+#if SMART_TUTOR_HAS_NATIVE_WHISPER
+#if __has_include("third_party/whisper.cpp")
+#include "third_party/whisper.cpp"
+#endif
 #endif
 
 namespace {
@@ -109,7 +109,16 @@ WhisperContext *whisper_init(const char *model_path) {
   @autoreleasepool {
     try {
 #if SMART_TUTOR_HAS_NATIVE_WHISPER
-      auto *ctx = ::whisper_init_from_file(model_path);
+      // Use context params with GPU acceleration enabled (Metal on iOS)
+      whisper_context_params cparams = whisper_context_default_params();
+#ifdef GGML_USE_METAL
+      cparams.use_gpu = true;
+      NSLog(@"whisper_init: Metal GPU acceleration enabled");
+#else
+      cparams.use_gpu = false;
+      NSLog(@"whisper_init: Using CPU-only mode");
+#endif
+      auto *ctx = ::whisper_init_from_file_with_params(model_path, cparams);
       if (ctx == nullptr) {
         throw std::runtime_error("Failed to load whisper.cpp model");
       }

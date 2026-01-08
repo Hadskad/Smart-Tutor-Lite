@@ -41,3 +41,7 @@ class WhisperNoSpeechFailure extends Failure {
 class AudioConversionFailure extends Failure {
   const AudioConversionFailure({super.message, super.cause});
 }
+
+class AuthFailure extends Failure {
+  const AuthFailure({super.message, super.cause});
+}

@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
-import { summarizeText } from '../utils/gemini-helpers';
+import { summarizeText } from '../utils/openai-helpers';
 import { extractTextFromPdf, downloadFile } from '../utils/storage-helpers';
 import { saveSummary } from '../utils/firestore-helpers';
 

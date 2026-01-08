@@ -71,7 +71,7 @@ Create a comprehensive, well-structured summary that a student can study from ef
   } else {
     // Standard prompt for general text summarization
     systemPrompt = 'You summarize content clearly, accurately, and in a way that preserves key ideas, main arguments, and essential details. You avoid unnecessary filler and maintain the author\'s intent and meaning.';
-    userPrompt = `Summarize the following text. Keep the length appropriate to the content. If it is long, produce a detailed multi-paragraph summary. If it is short, use a concise paragraph.\n\nText:\n${text}`;
+    userPrompt = `Summarize the following text. Keep the length appropriate to the content. If it is long, produce a detailed multi-paragraph summary. If it is short, adapt the summary length as well.\n\nText:\n${text}`;
   }
 
   const response = await openai.chat.completions.create({
@@ -173,8 +173,17 @@ export async function generateFlashcards(
 ): Promise<Array<{ front: string; back: string }>> {
   const { content, numFlashcards } = options;
 
-  const prompt = `Generate ${numFlashcards} flashcards based on the following content.
-Return a JSON array with this structure:
+  const prompt = `Generate ${numFlashcards} high-quality study flashcards based on the following content.
+
+  Rules:
+- Each flashcard must test ONE clear idea only
+- Front = question or term
+- Back = concise, factual answer or definition
+- Avoid vague wording, filler, or multi-part answers
+- Prefer recall-based questions over summaries
+- Do not repeat cards
+
+Return a JSON array exactly with this structure:
 [
   {
     "front": "Question or term",
@@ -221,7 +230,7 @@ export async function generateStudyNotes(content: string): Promise<StudyNote> {
 
 const STUDY_NOTES_JSON_SCHEMA_PROMPT = `Respond ONLY with a single valid JSON object EXACTLY matching this schema (no surrounding text):
 {
-  "title": "a short descriptive title based on the transcript content",
+  "title": "a short descriptive title based on the transcript content(topic being discussed)",
   "summary": "a comprehensive, richly formatted overview using Markdown syntax",
   "key_points": ["concise bullets capturing main ideas and sections"],
   "action_items": ["practical steps or concrete recommendations"],
@@ -229,7 +238,6 @@ const STUDY_NOTES_JSON_SCHEMA_PROMPT = `Respond ONLY with a single valid JSON ob
 }
 
 CONTENT FILTERING Guidelines:
-- Filter out casual greetings (e.g., "Good morning", "Hi everyone"), filler words, and off-topic conversation
 - Focus ONLY on educational content, concepts, facts, and explanations
 - Remove any non-instructional social interactions or small talk
 - Extract only the valuable educational information from the transcript
@@ -246,18 +254,16 @@ FORMATTING Guidelines for the summary field:
 - Structure content with clear hierarchies using markdown headers (###, ####)
 - Use bullet points and numbered lists for clarity
 - Include formulas and equations where relevant
-- Make it visually scannable and student-friendly
 
 CONTENT QUALITY:
-- Use ONLY information from the provided transcript. Do NOT fabricate.
+- If the transcript contains limited but clear topic signals, you may restate, organize, and elaborate ONLY on concepts explicitly mentioned, without introducing new subtopics, formulas, or definitions not referenced.
+- When information is insufficient, prefer concise notes over speculation.
 - Include ALL important information from the transcript - no key concepts should be omitted
 - Add helpful context, clarifications, or brief explanations that enhance understanding WITHOUT adding false information
 - Explain WHY concepts matter, not just WHAT they are
-- For short transcripts, keep concise. For long transcripts, write detailed multi-paragraph summaries
-- Key points should capture major ideas and sections. It is fine to have as many items as NEEDED, depending on the transcript length
-- Action items should be concrete, learner-focused steps. It is fine to have as many items as NEEDED, depending on the transcript length
-- Study questions should help the learner review, apply, and reflect. It is fine to have as many items as NEEDED, depending on the transcript length
-- Keep individual sentences reasonably short and clear (around 30 words or fewer when possible)`;
+- Key points should capture all major ideas and sections.
+- Action items should be concrete, learner-focused steps. 
+- Study questions should help the learner review, apply, and reflect.`;
 
 export async function generateStudyNotesWithMeta(
   content: string,
@@ -304,16 +310,7 @@ ${STUDY_NOTES_JSON_SCHEMA_PROMPT}`,
       },
       {
         role: 'user',
-        content: `Transform the following lecture transcript into beautifully formatted, comprehensive study notes.
-
-IMPORTANT:
-- Remove casual greetings, filler words, and off-topic conversation - extract ONLY educational content
-- For each concept: start with simple explanation → then academic explanation → then examples/formulas/definitions
-- Use rich Markdown formatting (bold for key terms, italics for emphasis, headers for structure, lists for clarity)
-- Include ALL important information while adding helpful clarifications where needed
-- Make it the absolute best learning resource for students
-
-Output must be valid JSON matching the schema.
+        content: `Convert the following lecture transcript into study notes.
 
 Transcript:
 """

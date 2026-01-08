@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../../app/routes.dart';
+import '../../../../dialog/dialogs.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../auth/presentation/bloc/auth_state.dart';
 
 // --- Color Palette (matching home dashboard) ---
 const Color _kBackgroundColor = Color(0xFF1E1E1E);
 const Color _kCardColor = Color(0xFF333333);
-const Color _kAccentPurple = Color(0xFF9C27B0); // Purple for upgrade button
-const Color _kAccentCoral = Color(0xFFFF7043); // Soft Coral/Orange for logout
 const Color _kWhite = Colors.white;
 const Color _kLightGray = Color(0xFFCCCCCC);
 const Color _kDarkGray = Color(0xFF888888);
@@ -14,129 +18,161 @@ class SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _kBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: _kBackgroundColor,
-        elevation: 0,
-        title: const Text(
-          'Settings',
-          style: TextStyle(
-            color: _kWhite,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, state) {
+        // Get user data from auth state
+        String userName = 'User';
+        String userEmail = '';
+        String? photoUrl;
+
+        if (state is Authenticated) {
+          userName = state.user.fullName.isNotEmpty
+              ? state.user.fullName
+              : 'User';
+          userEmail = state.user.email;
+          photoUrl = state.user.photoUrl;
+        } else if (state is EmailNotVerified) {
+          userName = state.user.fullName.isNotEmpty
+              ? state.user.fullName
+              : 'User';
+          userEmail = state.user.email;
+          photoUrl = state.user.photoUrl;
+        } else if (state is ProfilePhotoUpdating) {
+          userName = state.user.fullName.isNotEmpty
+              ? state.user.fullName
+              : 'User';
+          userEmail = state.user.email;
+          photoUrl = state.user.photoUrl;
+        } else if (state is ProfileNameUpdating) {
+          userName = state.user.fullName.isNotEmpty
+              ? state.user.fullName
+              : 'User';
+          userEmail = state.user.email;
+          photoUrl = state.user.photoUrl;
+        }
+
+        return Scaffold(
+          backgroundColor: _kBackgroundColor,
+          appBar: AppBar(
+            backgroundColor: _kBackgroundColor,
+            elevation: 0,
+            title: const Text(
+              'Settings',
+              style: TextStyle(
+                color: _kWhite,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            iconTheme: const IconThemeData(color: _kWhite),
           ),
-        ),
-        iconTheme: const IconThemeData(color: _kWhite),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-
-                // User Profile Card
-                _UserProfileCard(
-                  name: 'Hadid Musbau',
-                  email: 'hadidmusbau@gmail.com',
-                  onTap: () {
-                    // Navigate to profile details
-                  },
-                ),
-
-                const SizedBox(height: 20),
-
-                // Upgrade to Unlimited Button
-                _UpgradeButton(
-                  onTap: () {
-                    // Navigate to subscription page
-                  },
-                ),
-
-                const SizedBox(height: 30),
-
-                // ACCOUNT Section
-                _SectionHeader(title: 'APP'),
-                const SizedBox(height: 12),
-                _SettingsCard(
+          body: SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                 
-                    _SettingsTile(
-                      icon: Icons.palette_outlined,
-                      title: 'Theme',
-                      trailing: 'System',
+                    const SizedBox(height: 20),
+
+                    // User Profile Card
+                    _UserProfileCard(
+                      name: userName,
+                      email: userEmail,
+                      photoUrl: photoUrl,
                       onTap: () {
-                        // Navigate to theme settings
+                        // Navigate to profile details
                       },
                     ),
-                 
-                  ],
-                ),
 
-                const SizedBox(height: 30),
+                    const SizedBox(height: 20),
 
-                // SUBSCRIPTION Section
-                _SectionHeader(title: 'SUBSCRIPTION'),
-                const SizedBox(height: 12),
-                _SettingsCard(
-                  children: [
-                    _SettingsTile(
-                      icon: Icons.card_membership_outlined,
-                      title: 'Manage Subscription',
-                      trailing: 'Free Plan',
+                    // Upgrade to Unlimited Button
+                    _UpgradeButton(
                       onTap: () {
-                        // Navigate to subscription management
+                        Navigator.pushNamed(context, AppRoutes.subscription);
                       },
                     ),
-                    
-                  
-                  ],
-                ),
 
-                const SizedBox(height: 30),
+                    const SizedBox(height: 30),
 
-                // SUPPORT Section
-                _SectionHeader(title: 'SUPPORT'),
-                const SizedBox(height: 12),
-                _SettingsCard(
-                  children: [
-                    _SettingsTile(
-                      icon: Icons.headset_mic_outlined,
-                      title: 'Contact Support',
+                    // APP Section
+                    const _SectionHeader(title: 'APP'),
+                    const SizedBox(height: 12),
+                    _SettingsCard(
+                      children: [
+                        _SettingsTile(
+                          icon: Icons.palette_outlined,
+                          title: 'Theme',
+                          trailing: 'System',
+                          onTap: () {
+                            // Navigate to theme settings
+                          },
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    // SUBSCRIPTION Section
+                    const _SectionHeader(title: 'SUBSCRIPTION'),
+                    const SizedBox(height: 12),
+                    _SettingsCard(
+                      children: [
+                        _SettingsTile(
+                          icon: Icons.card_membership_outlined,
+                          title: 'Manage Subscription',
+                          trailing: 'Free Plan',
+                          onTap: () {
+                            Navigator.pushNamed(context, AppRoutes.subscription);
+                          },
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    // SUPPORT Section
+                    const _SectionHeader(title: 'SUPPORT'),
+                    const SizedBox(height: 12),
+                    _SettingsCard(
+                      children: [
+                        _SettingsTile(
+                          icon: Icons.headset_mic_outlined,
+                          title: 'Contact Support',
+                          onTap: () {
+                            // Navigate to contact support
+                          },
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 40),
+
+                    // Logout Button
+                    _LogoutButton(
                       onTap: () {
-                        // Navigate to contact support
+                        logoutDialog(context);
                       },
                     ),
+
+                    const SizedBox(height: 15),
+
+                    // Delete Account Button
+                    _DeleteAccountButton(
+                      onTap: () {
+                        deleteAccountDialog(context);
+                      },
+                    ),
+
+                    const SizedBox(height: 40),
                   ],
                 ),
-
-                const SizedBox(height: 40),
-
-                // Logout Button
-                _LogoutButton(
-                  onTap: () {
-                    // Handle logout
-                  },
-                ),
-
-                const SizedBox(height: 15),
-
-                // Delete Account Text
-                _DeleteAccountButton(
-                  onTap: (){
-                    //Handle account deletion
-                  }
-                  ),
-
-                const SizedBox(height: 40),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -147,10 +183,12 @@ class _UserProfileCard extends StatelessWidget {
     required this.name,
     required this.email,
     required this.onTap,
+    this.photoUrl,
   });
 
   final String name;
   final String email;
+  final String? photoUrl;
   final VoidCallback onTap;
 
   @override
@@ -170,14 +208,30 @@ class _UserProfileCard extends StatelessWidget {
             Container(
               width: 60,
               height: 60,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 color: _kBackgroundColor,
               ),
-              child: const Icon(
-                Icons.person,
-                color: _kWhite,
-                size: 32,
+              child: ClipOval(
+                child: photoUrl != null && photoUrl!.isNotEmpty
+                    ? Image.network(
+                        photoUrl!,
+                        fit: BoxFit.cover,
+                        width: 60,
+                        height: 60,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.person,
+                            color: _kWhite,
+                            size: 32,
+                          );
+                        },
+                      )
+                    : const Icon(
+                        Icons.person,
+                        color: _kWhite,
+                        size: 32,
+                      ),
               ),
             ),
             const SizedBox(width: 16),
@@ -204,12 +258,6 @@ class _UserProfileCard extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-            // Arrow Icon
-            const Icon(
-              Icons.chevron_right,
-              color: _kLightGray,
-              size: 28,
             ),
           ],
         ),
@@ -240,16 +288,16 @@ class _UpgradeButton extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Row(
+        child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.auto_awesome,
               color: _kWhite,
               size: 24,
             ),
-            const SizedBox(width: 12),
-            const Text(
+            SizedBox(width: 12),
+            Text(
               'Upgrade to Unlimited',
               style: TextStyle(
                 color: _kWhite,
@@ -395,7 +443,6 @@ class _LogoutButton extends StatelessWidget {
   }
 }
 
-
 // --- Delete account button ---
 class _DeleteAccountButton extends StatelessWidget {
   const _DeleteAccountButton({required this.onTap});
@@ -409,7 +456,6 @@ class _DeleteAccountButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         width: double.infinity,
-        
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: Colors.red,
